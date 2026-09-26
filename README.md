@@ -22,14 +22,20 @@ Server only. Players do not need to install anything.
 ## Setup
 
 1. Put `polymer-patcher-plus-plus-<version>.jar`, Polymer and Fabric API in the server's `mods` folder with your other mods.
-2. **Take a render dump.** Modded mobs are drawn from a description of their models that has to come from a
-   client, because a server has no rendering code. Install this mod on a client that has *the same mods as the
-   server*, open any single-player world, and it writes `polymer-patcher-dump.json` by itself - to
-   `~/.polymer-patcher/` and to the client's `config` folder.
+2. **Turn on Polymer's resource pack auto-hosting.** Without it, players never receive the pack and every
+   modded block, item and mob shows as its plain vanilla stand-in. In the server's `config/polymer/auto-host.json`,
+   set `"enabled": true`.
+3. **Take a render dump.** Modded mobs are drawn from a description of their models that has to come from a
+   client, because a server has no rendering code.
+   1. Install this mod on a client that has *the same mods as the server*.
+   2. Open any single-player world and run `/pp-dump`.
+   3. Wait for the chat message `[Polymer Patcher++] Saved. You can close this world and start the server.`
+      That writes `polymer-patcher-dump.json` to `~/.polymer-patcher/` and to the client's `config` folder.
+
    - Hosting on the same machine: the server finds the copy in your home folder on its own.
    - Rented host: upload `polymer-patcher-dump.json` into the server's `config` folder.
    - Take a new dump whenever you add or update a mod with mobs. The server log names any mod missing from it.
-3. Start the server. The resource pack is generated at startup and sent to players automatically.
+4. Start the server. The resource pack is generated at startup and sent to players automatically.
 
 ## What it handles
 

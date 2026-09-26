@@ -75,7 +75,7 @@ public final class AutoDump {
         } catch (IOException | RuntimeException e) {
             PolymerPatcherDumper.LOGGER.error("Failed to save render registry", e);
             if (announce) {
-                say(Component.literal("[Polymer Patcher] ").withStyle(ChatFormatting.AQUA)
+                say(Component.literal("[Polymer Patcher++] ").withStyle(ChatFormatting.AQUA)
                     .append(Component.literal("Failed to write the render dump; see the log.")
                         .withStyle(ChatFormatting.RED)));
             }
@@ -121,12 +121,12 @@ public final class AutoDump {
      * Tells the player what was read and that they are free to leave again.
      */
     private static void announce(@NotNull RenderRegistry registry) {
-        say(Component.literal("[Polymer Patcher] ").withStyle(ChatFormatting.AQUA)
+        say(Component.literal("[Polymer Patcher++] ").withStyle(ChatFormatting.AQUA)
             .append(Component.literal("Read " + registry.entityData.size() + " modded entity renderer(s) across "
                     + registry.namespaces.size() + " mod(s).")
                 .withStyle(ChatFormatting.GREEN)));
 
-        say(Component.literal("[Polymer Patcher] ").withStyle(ChatFormatting.AQUA)
+        say(Component.literal("[Polymer Patcher++] ").withStyle(ChatFormatting.AQUA)
             .append(Component.literal("Saved. You can close this world and start the server.")
                 .withStyle(ChatFormatting.GRAY)));
     }
