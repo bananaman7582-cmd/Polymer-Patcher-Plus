@@ -1,0 +1,24 @@
+{
+	"required": true,
+	"package": "me.drex.polymerpatcher.dump.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"mixinextras": {
+		"minVersion": "0.5.0"
+	},
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	},
+	"client": [
+		"BiomeColorsMixin",
+		"EntityModelSetMixin",
+		"EntityRenderersMixin",
+		"LayerDefinitionMixin",
+		"ModelMixin",
+		"RenderSetupAccessor",
+		"RenderTypeAccessor",
+		"SubmitNodeCollectionMixin"
+	]
+}

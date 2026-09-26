@@ -1,0 +1,289 @@
+plugins {
+	id 'fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+    maven { url 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/' }
+    maven { url 'https://maven.nucleoid.xyz/releases' }
+    maven { url 'https://maven.terraformersmc.com/' }
+    maven { url 'https://api.modrinth.com/maven/' }
+    maven { url 'https://maven.bawnorton.com/releases' }
+    maven { url 'https://maven.isxander.dev/releases' }
+    maven { url 'https://repo.greenhouse.house/releases/' }
+    maven {
+        url "https://maven.theepicblock.nl"
+        content { includeGroup("nl.theepicblock") }
+    }
+}
+
+// 26.2 ships unobfuscated: Mojang publishes no client_mappings for it and Fabric's intermediary stops
+// at 1.21.11, so there is nothing left to rename. Loom detects that and reads the game in its own
+// names, but it still insists on being handed a mappings dependency - so it gets one that says
+// nothing. A tiny v2 header naming the two namespaces and not one entry under it leaves every class,
+// field and method exactly where it already is.
+// Written now rather than by a task, because loom reads the layer while the build is still being
+// configured and would find nothing there yet.
+def identityMappings = layout.buildDirectory.file("unobfuscated-mappings.tiny").get().asFile
+identityMappings.parentFile.mkdirs()
+identityMappings.text = "tiny\t2\t0\tofficial\tintermediary\tnamed\n"
+
+dependencies {
+	// To change the versions see the gradle.properties file
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings loom.layered {
+		mappings(identityMappings)
+	}
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    modImplementation include("eu.pb4:factorytools:${project.factorytools_version}")
+    modImplementation include("nl.theepicblock:resource-locator-api:${project.resource_locator_version}")
+
+    modImplementation "eu.pb4:polymer-core:${project.polymer_version}"
+    modImplementation("eu.pb4:polymer-blocks:${project.polymer_version}")
+    modImplementation "eu.pb4:polymer-resource-pack:${project.polymer_version}"
+    modImplementation("eu.pb4:polymer-sound-patcher:${project.polymer_version}")
+    modImplementation "eu.pb4:polymer-resource-pack-extras:${project.polymer_version}"
+    modImplementation("eu.pb4:polymer-autohost:${project.polymer_version}")
+    modImplementation "eu.pb4:polymer-virtual-entity:${project.polymer_version}"
+    // Vanilla-safe server GUIs. This is the same library used by the official-style Farmer's
+    // Delight Polymer patch to expose its cooking pot without sending a custom menu type.
+    modImplementation include("eu.pb4:sgui:${project.sgui_version}")
+
+    // Optional at runtime: it is only present here so the Enderscape compatibility mixins can be
+    // compiled. The patcher continues to load normally when Enderscape is absent.
+    modCompileOnly("maven.modrinth:enderscape:${project.enderscape_version}") {
+        transitive = false
+    }
+
+    // Optional bridge for GeckoLib's server-originated animation trigger packets. It is never
+    // included in our jar and the mixin is selected only when GeckoLib is installed.
+    modCompileOnly("com.geckolib:geckolib-fabric-26.2:5.5.5") {
+        transitive = false
+    }
+
+    // Development-only copies make runServer exercise the optional adapter. They are not bundled
+    // into Polymer Patcher or required when Enderscape is absent.
+    modLocalRuntime("maven.modrinth:enderscape:${project.enderscape_version}") {
+        exclude(group: "net.fabricmc")
+    }
+    modLocalRuntime "maven.modrinth:trim-patcher:1.0-mc26.2"
+    modLocalRuntime "dev.isxander:yet-another-config-lib:3.9.6+26.2-fabric"
+    modLocalRuntime "maven.modrinth:lithostitched:1.7.13-fabric-26.2"
+
+    // Needed to cancel Enderscape's enum-extending note-instrument mixin. A vanilla client cannot
+    // possess enum constants added on the server, so those instruments are mapped to vanilla ones.
+    include(modImplementation(annotationProcessor("com.github.bawnorton.mixinsquared:mixinsquared-fabric:${project.mixinsquared_version}")))
+
+	implementation project(path: ":client-dump", configuration: "namedElements")
+	include project(":client-dump")
+}
+
+// Block-state packets contain numeric ids rather than names. Generate the exact pristine 26.2
+// name/properties -> id table in a JVM where Fabric and server mods are not launched, then embed it in
+// the jar. The running server can have tens of thousands of extra states and cannot reconstruct this
+// client ordering from its already-modified registry.
+def vanillaStateMapOutputDir = layout.buildDirectory.dir("generated/vanilla-state-map")
+sourceSets {
+    stateMapGenerator {
+        java.srcDir "src/stateMapGenerator/java"
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+}
+sourceSets.main.resources.srcDir(vanillaStateMapOutputDir)
+
+tasks.register("generateVanillaBlockStateMap", JavaExec) {
+    dependsOn tasks.named("compileStateMapGeneratorJava")
+    classpath = sourceSets.stateMapGenerator.runtimeClasspath
+    mainClass = "me.drex.polymerpatcher.build.VanillaBlockStateMapGenerator"
+    def outputFile = vanillaStateMapOutputDir.map { it.file("assets/polymer-patcher/vanilla_block_states_26_2.tsv") }
+    args outputFile.get().asFile.absolutePath
+    outputs.file(outputFile)
+}
+
+processResources {
+	inputs.property "version", project.version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": project.version
+	}
+}
+
+// Every produced jar must be uniquely identifiable, so bump the patch version in
+// gradle.properties once per jar build. The dev server (runServer) is unaffected.
+tasks.register("bumpVersion") {
+	doLast {
+		def propsFile = file("gradle.properties")
+		def propsText = propsFile.getText("UTF-8")
+		def match = (propsText =~ /mod_version\s*=\s*(\d+)\.(\d+)\.(\d+)/)
+		if (!match.find()) {
+			throw new GradleException("bumpVersion: could not parse mod_version in gradle.properties")
+		}
+		def next = "${match.group(1)}.${match.group(2)}.${match.group(3).toInteger() + 1}"
+		propsText = propsText.replaceFirst(/mod_version\s*=\s*\d+\.\d+\.\d+/, "mod_version=${next}")
+		propsFile.setText(propsText, "UTF-8")
+		// The client dumper is embedded in the server jar. Keep both projects on the same newly
+		// allocated version before either resource file or archive is produced.
+		rootProject.allprojects.each { it.version = next }
+		println "bumpVersion: ${match.group(0)} -> mod_version=${next}"
+	}
+}
+
+tasks.named("processResources") {
+	dependsOn tasks.named("generateVanillaBlockStateMap")
+	mustRunAfter "bumpVersion"
+	// bumpVersion changes the value after Gradle's up-to-date snapshot has been made. Always expand
+	// fabric.mod.json again so the version announced by the running mod matches the jar filename.
+	outputs.upToDateWhen { false }
+}
+
+tasks.named("jar") {
+	dependsOn "bumpVersion"
+	archiveVersion = providers.provider { project.version.toString() }
+}
+
+project(":client-dump").afterEvaluate { clientProject ->
+	clientProject.tasks.named("processResources") {
+		mustRunAfter rootProject.tasks.named("bumpVersion")
+		outputs.upToDateWhen { false }
+	}
+	clientProject.tasks.named("jar") {
+		mustRunAfter rootProject.tasks.named("bumpVersion")
+		archiveVersion = clientProject.providers.provider { clientProject.version.toString() }
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+}
+
+// These transforms replace code which normally runs only inside Alex's Caves' client renderer.
+// Compile and execute an independent matrix reconstruction on every check so a harmless-looking
+// change in transform order, left-hand mirroring or model scale cannot ship misplaced weapons.
+tasks.register("verifyAlexsCavesHeldItemTransforms", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.compat.alexscaves.AlexsCavesHeldItemTransformCheck"
+}
+
+tasks.register("verifyModBiomeLight", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.registry.ModBiomeLightCheck"
+}
+
+tasks.register("verifyHeldItemPresentations", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.item.HeldItemPresentationCheck"
+}
+
+tasks.register("verifyFluidModels", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.block.fluid.FluidModelsCheck"
+}
+
+tasks.register("verifyReadableRegistryData", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.registry.ReadableRegistryDataCheck"
+}
+
+tasks.register("verifyBlockSyncSafety", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.registry.BlockSyncSafetyCheck"
+}
+
+tasks.register("verifyEntityModelAnimation", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.entity.EntityModelAnimationCheck"
+}
+
+tasks.register("verifyNuclearFurnaceUi", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.compat.alexscaves.NuclearFurnaceUiCheck"
+}
+
+tasks.register("verifyAutomaticMenuLayout", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.util.AutomaticMenuLayoutCheck"
+}
+
+tasks.register("verifyBorrowedEchoPresentation", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.compat.borrowedecho.BorrowedEchoPresentationCheck"
+}
+
+tasks.named("test") {
+	// This source set contains a standalone executable verifier, not a JUnit/TestNG class.
+	failOnNoDiscoveredTests = false
+}
+
+tasks.named("check") {
+	dependsOn tasks.named("verifyAlexsCavesHeldItemTransforms")
+	dependsOn tasks.named("verifyHeldItemPresentations")
+	dependsOn tasks.named("verifyFluidModels")
+	dependsOn tasks.named("verifyReadableRegistryData")
+	dependsOn tasks.named("verifyBlockSyncSafety")
+	dependsOn tasks.named("verifyModBiomeLight")
+	dependsOn tasks.named("verifyEntityModelAnimation")
+	dependsOn tasks.named("verifyNuclearFurnaceUi")
+	dependsOn tasks.named("verifyAutomaticMenuLayout")
+	dependsOn tasks.named("verifyBorrowedEchoPresentation")
+}
+
+loom {
+    accessWidenerPath = file("src/main/resources/polymer-patcher.classtweaker")
+
+    // Nothing to translate through on an unobfuscated Minecraft
+    noIntermediateMappings()
+}
+
+java {
+	// No sources jar: remapping one needs an intermediary namespace, and 26.2 has none to map through
+
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+	inputs.property "archivesName", project.base.archivesName
+
+	from("LICENSE") {
+		rename { "${it}_${inputs.properties.archivesName}"}
+	}
+}
+
+// configure the maven publication
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			artifactId = project.archives_base_name
+			from components.java
+		}
+	}
+
+	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
+	repositories {
+		// Add repositories to publish to here.
+		// Notice: This block does NOT have the same function as the block in the top level.
+		// The repositories here will be used for publishing your artifact, not for
+		// retrieving dependencies.
+	}
+}

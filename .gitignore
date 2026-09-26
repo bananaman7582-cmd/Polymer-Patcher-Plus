@@ -1,0 +1,50 @@
+# gradle
+
+.gradle/
+build/
+out/
+classes/
+
+# eclipse
+
+*.launch
+
+# idea
+
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# vscode
+
+.settings/
+.vscode/
+bin/
+.classpath
+.project
+
+# macos
+
+*.DS_Store
+
+# fabric
+
+run/
+
+# java
+
+hs_err_*.log
+replay_*.log
+*.hprof
+*.jfr
+.aider*
+
+# local-only files that must not be published
+logs/
+.aider-desk/
+# copies of Polymer sources kept for reference, not part of the build
+eu/
+/polymer-core.mixins.json
+# a separate mod, not part of this build
+the-sift-fantasy-compat/

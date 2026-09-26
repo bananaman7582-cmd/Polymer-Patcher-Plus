@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "package": "me.drex.polymerpatcher.mixin.enderscape",
+  "plugin": "me.drex.polymerpatcher.compat.enderscape.EnderscapeMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "minVersion": "0.8",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "mixins": [],
+  "client": []
+}

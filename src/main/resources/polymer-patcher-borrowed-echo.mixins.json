@@ -1,0 +1,11 @@
+{
+  "required": false,
+  "package": "me.drex.polymerpatcher.mixin.borrowedecho",
+  "plugin": "me.drex.polymerpatcher.client.BorrowedEchoMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "minVersion": "0.8",
+  "injectors": {
+    "defaultRequire": 0
+  },
+  "mixins": []
+}

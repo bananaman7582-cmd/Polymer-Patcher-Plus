@@ -1,0 +1,66 @@
+{
+	"schemaVersion": 1,
+	"id": "polymer-patcher",
+	"version": "${version}",
+	"name": "Polymer Patcher++",
+	"description": "Making minecraft mods compatible with vanilla clients",
+	"authors": [
+		"Bananaman"
+	],
+	"contributors": [
+		"Drex (original author)"
+	],
+	"license": "LGPLv3",
+	"icon": "assets/polymer-patcher/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"server": [
+			"me.drex.polymerpatcher.PolymerPatcher"
+		],
+		"mixinsquared": [
+			"me.drex.polymerpatcher.compat.enderscape.EnderscapeMixinCanceller"
+		]
+	},
+	"mixins": [
+		{
+			"config": "polymer-patcher.mixins.json",
+			"environment": "server"
+		},
+		{
+			"config": "polymer-patcher-geckolib.mixins.json",
+			"environment": "server"
+		},
+		{
+			"config": "polymer-patcher-geckolib-patch.mixins.json",
+			"environment": "server"
+		},
+		{
+			"config": "polymer-patcher-citadel.mixins.json",
+			"environment": "server"
+		},
+		{
+			"config": "polymer-patcher-alexsmobs.mixins.json",
+			"environment": "server"
+		},
+		{
+			"config": "polymer-patcher-borrowed-echo.mixins.json",
+			"environment": "server"
+		},
+		{
+			"config": "polymer-patcher-enderscape.mixins.json",
+			"environment": "*"
+		}
+	],
+	"accessWidener": "polymer-patcher.classtweaker",
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*",
+		"polymer-core": ">=0.17.5",
+		"polymer-blocks": ">=0.17.5",
+		"polymer-resource-pack": ">=0.17.5",
+		"polymer-virtual-entity": ">=0.17.5",
+		"polymer-autohost": ">=0.17.5"
+	}
+}

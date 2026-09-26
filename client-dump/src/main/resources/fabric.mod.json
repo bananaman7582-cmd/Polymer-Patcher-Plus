@@ -1,0 +1,31 @@
+{
+	"schemaVersion": 1,
+	"id": "polymer-patcher-client-dump",
+	"version": "${version}",
+	"name": "Polymer Patcher++ Client Dump",
+	"description": "Dumps client-side classes for polymer-patcher",
+	"authors": [
+		"Bananaman"
+	],
+	"contributors": [
+		"Drex (original author)"
+	],
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"client": [
+			"me.drex.polymerpatcher.dump.PolymerPatcherDumper"
+		]
+	},
+	"mixins": [
+		{
+			"config": "polymer-patcher-client-dump.mixins.json",
+			"environment": "client"
+		}
+	],
+	"accessWidener": "polymer-patcher-client-dump.classtweaker",
+	"depends": {
+		"fabricloader": ">=0.18.4",
+		"java": ">=21"
+	}
+}
