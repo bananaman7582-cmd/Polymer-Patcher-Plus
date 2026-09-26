@@ -104,7 +104,7 @@ fluid models, registry data) that fail the build if something is wrong.
 ## Credits and license
 
 Polymer Patcher++ is based on Polymer Patcher, originally created by **Drex** ([DrexHD](https://github.com/DrexHD)). This version has been
-extensively modified and extended by **Bananaman**.
+extensively modified and extended by me, **Bananaman**.
 
 Licensed under the **GNU LGPL v3** - see [LICENSE](LICENSE). Built on [Polymer](https://github.com/Patbox/polymer)
 and FactoryTools by Patbox.
