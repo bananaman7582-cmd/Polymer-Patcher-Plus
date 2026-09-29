@@ -17,7 +17,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Keeps the readable stand-in for a mod's item definition beside the mod's own, rather than on top of it.
+ * Keeps a readable stand-in for a mod's item definition under a separate identifier.
  * <p>
  * Some item definitions need the mod's code to be read at all - a cave tablet tinted by its biome, a
  * gauntlet or a shield drawn by the mod's own renderer. A client without the mod cannot read those, so the
@@ -25,9 +25,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * that <i>does</i> have the mod loads the server's pack on top of its own assets, so it lost the tint and
  * the renderer too - on the very items it was now being handed for real.
  * <p>
- * So the plain version is written under this mod's namespace instead, the mod's file is left exactly as the
- * mod wrote it, and only a stand-in is pointed at the plain one. A client with the mod is sent the real item,
- * which names the mod's own definition; a client without it is sent a stand-in, which names the copy.
+ * So the plain version is written under this mod's namespace instead and only a stand-in is pointed at the
+ * plain one. The raw code-only definition is omitted from the generated server pack: a vanilla client tries
+ * to decode every definition in an enabled pack and would otherwise log an error even when no stack uses it.
+ * A client with the mod still resolves the original definition from its installed mod, while a client without
+ * it is sent a stand-in which names the readable copy.
  * <p>
  * Which definitions get a copy is worked out from the mod's own file, so it is known from the moment the
  * server starts - before the pack is built, and whether or not it is built here at all.

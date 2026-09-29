@@ -7,6 +7,7 @@ import eu.pb4.polymer.virtualentity.api.BlockWithElementHolder;
 import me.drex.polymerpatcher.PolymerPatcher;
 import me.drex.polymerpatcher.config.BlockConfig;
 import me.drex.polymerpatcher.config.ConfigManager;
+import me.drex.polymerpatcher.resources.ResourceHelper;
 import me.drex.polymerpatcher.resources.ResourcePackGenerator;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.Identifier;
@@ -19,7 +20,15 @@ public class PolymerBlockHelper {
     public static void registerPolymerBlock(Identifier id, Block block) {
         // Solid and transparent blocks used to be registered through separate calls; factorytools now
         // takes both through one and works the difference out from the block itself
-        BlockStateModelManager.addBlock(id, block);
+        // FactoryTools assumes every registered block has a conventional blockstate JSON and tries
+        // to construct a String from null when a renderer-only block does not. The call already fails
+        // without registering anything; avoiding it here removes a large startup stack trace per
+        // custom-rendered block and saves the failed parse without changing its fallback path.
+        if (ResourceHelper.getAsset(id.getNamespace(), "blockstates/" + id.getPath() + ".json") != null) {
+            BlockStateModelManager.addBlock(id, block);
+        } else {
+            PolymerPatcher.LOGGER.debug("{} has no blockstate JSON; skipping FactoryTools' conventional model decoder", id);
+        }
 
         PolymerBlock polymerBlock = requestPolymerBlock(id, block);
         PolymerBlock.registerOverlay(block, polymerBlock);

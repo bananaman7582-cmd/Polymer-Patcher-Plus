@@ -44,6 +44,7 @@
 		"polymer.light.ClientboundLightUpdatePacketDataMixin",
 		"polymer.light.ServerChunkCacheMixin",
 		"polymer.DefaultModelDataMixin",
+		"polymer.InternalEntityHelpersMixin",
 		"polymer.PacketPatcherMixin",
 		"polymer.PolymerBlockEntryMixin",
 		"polymer.PolymerBlockUtilsMixin",

@@ -69,8 +69,13 @@ public final class ModdedMenus {
     public static boolean openForVanillaClient(ServerPlayer player, net.minecraft.world.MenuProvider provider,
                                                AbstractContainerMenu menu) {
         Identifier id = menuId(menu);
+        // A menu that opens by pointing the client at a block reads that block's block entity on the client.
+        // Every client - one with the mod too - is sent a stand-in for a modded block, so there is none, and
+        // the mod's own screen crashes the client (Sculk Horde's soul harvester). Those always get the
+        // vanilla version, whoever opens them
+        boolean pointsAtBlock = menu.getType() instanceof net.fabricmc.fabric.api.menu.v1.ExtendedMenuType<?, ?>;
         if (id == null || id.getNamespace().equals("minecraft") || !NativeClients.settled(player)
-            || NativeClients.carries(player, id.getNamespace())) {
+            || (NativeClients.carries(player, id.getNamespace()) && !pointsAtBlock)) {
             return false;
         }
 
@@ -119,7 +124,7 @@ public final class ModdedMenus {
             return false;
         }
 
-        if (NativeClients.carries(player, id.getNamespace())) {
+        if (NativeClients.carries(player, id.getNamespace()) && !(menu.getType() instanceof net.fabricmc.fabric.api.menu.v1.ExtendedMenuType<?, ?>)) {
             // They have the mod; the screen is theirs to draw and this has no business here
             return false;
         }

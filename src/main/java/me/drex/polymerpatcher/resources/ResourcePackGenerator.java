@@ -1,6 +1,7 @@
 package me.drex.polymerpatcher.resources;
 
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -241,6 +242,7 @@ public class ResourcePackGenerator {
      */
     private static void replaceClientOnlyItemModels(ResourcePackBuilder builder) {
         List<ItemFallback> replacements = new ArrayList<>();
+        Set<String> unreadableDefinitions = new LinkedHashSet<>();
 
         builder.forEachResource((path, resource) -> {
             String[] parts = path.split("/", 4);
@@ -260,9 +262,12 @@ public class ResourcePackGenerator {
                 JsonObject root = JsonParser.parseString(new String(resource.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
                 JsonElement model = root.get("model");
                 if (model != null && ItemModelFallbacks.needsModCode(model)) {
-                    // Written beside the mod's definition rather than over it: a client that has the mod
-                    // loads this pack on top of its own assets, and must still find the original there.
-                    // Only stand-ins are pointed at the copy - see ItemModelFallbacks
+                    // The readable definition is written beside the original and stand-ins point at it.
+                    // The original itself must not be republished in the server pack: a stock client
+                    // attempts to decode every item definition in an enabled pack, even one no stack
+                    // currently uses, and logs an error for every mod-only codec. Omitting it is safe for
+                    // native clients too, because their installed mod remains the lower-priority source.
+                    unreadableDefinitions.add(path);
                     Identifier standIn = ItemModelFallbacks.standInId(parts[1], itemPath);
                     JsonObject tintBridge = ItemTintFallbacks.rewrite(root, parts[1], itemPath);
                     if (tintBridge != null) {
@@ -292,8 +297,13 @@ public class ResourcePackGenerator {
             }
         }
 
+        if (!unreadableDefinitions.isEmpty()) {
+            Set<String> omitted = Set.copyOf(unreadableDefinitions);
+            builder.addResourceConverter((path, resource) -> omitted.contains(path) ? null : resource);
+        }
+
         if (!replacements.isEmpty()) {
-            PolymerPatcher.LOGGER.info("Replaced {} item definition(s) that require client-only model code with vanilla-readable fallbacks",
+            PolymerPatcher.LOGGER.info("Replaced {} item definition(s) that require client-only model code with vanilla-readable fallbacks; their unreadable originals will not be published",
                 replacements.size());
         }
     }
@@ -401,23 +411,173 @@ public class ResourcePackGenerator {
      */
     private static void leaveOutBackgroundMusic(ResourcePackBuilder builder) {
         var resources = ConfigManager.config().resources;
-        if (!resources.excludeMusicFromPack || resources.excludedSoundFolders.isEmpty()) {
-            return;
+        List<String> folders = resources.excludeMusicFromPack
+            ? List.copyOf(resources.excludedSoundFolders)
+            : List.of();
+        Set<String> interactiveMusic = new HashSet<>();
+
+        // Sounds tables are merged by Polymer immediately before pre-finish tasks. Read that final
+        // form, so a disc contributed through an extra pack is protected just like one from a mod.
+        // The output itself is sorted, but this makes the protection independent of output order.
+        if (resources.includeMusicDiscs && !folders.isEmpty()) {
+            builder.addPreFinishTask(finished -> {
+                finished.forEachResource((path, resource) -> collectInteractiveMusic(path, resource, interactiveMusic));
+                if (!interactiveMusic.isEmpty()) {
+                    PolymerPatcher.LOGGER.info("Keeping {} music-disc sound file(s) in the generated pack", interactiveMusic.size());
+                }
+            });
         }
 
-        List<String> folders = List.copyOf(resources.excludedSoundFolders);
-        int[] left = {0};
-
         builder.addResourceConverter((path, resource) -> {
-            if (!isBackgroundSound(path, folders)) {
-                return resource;
+            if (isSoundsTable(path)) {
+                return sanitizeSoundTable(builder, path, resource, folders, interactiveMusic);
             }
-            left[0]++;
-            // Null is how this says "do not write it at all"
-            return null;
+            if (!folders.isEmpty() && isBackgroundSound(path, folders)
+                && !interactiveMusic.contains(path)) {
+                // Null is how this says "do not write it at all"
+                return null;
+            }
+            return resource;
         });
 
-        PolymerPatcher.LOGGER.info("Leaving {} out of the resource pack to keep it small enough to download; set resources.excludeMusicFromPack to false to include them", folders);
+        if (!folders.isEmpty()) {
+            PolymerPatcher.LOGGER.info("Leaving {} out of the resource pack to keep it small enough to download; set resources.excludeMusicFromPack to false to include them", folders);
+        }
+    }
+
+    /** A namespace's one sound event table. */
+    private static boolean isSoundsTable(String path) {
+        String[] parts = path.split("/");
+        return parts.length == 3 && parts[0].equals("assets") && parts[2].equals("sounds.json");
+    }
+
+    /** Records sound files belonging to explicitly interactive music events before music is omitted. */
+    private static void collectInteractiveMusic(String path, PackResource resource, Set<String> into) {
+        if (!isSoundsTable(path)) {
+            return;
+        }
+        try {
+            String namespace = path.split("/")[1];
+            JsonObject table = JsonParser.parseString(resource.asString()).getAsJsonObject();
+            for (var event : table.entrySet()) {
+                String name = event.getKey().toLowerCase(Locale.ROOT);
+                if (!name.contains("disc") && !name.contains("record") && !name.contains("jukebox")) {
+                    continue;
+                }
+                JsonObject definition = event.getValue().isJsonObject() ? event.getValue().getAsJsonObject() : null;
+                if (definition == null || !definition.has("sounds") || !definition.get("sounds").isJsonArray()) {
+                    continue;
+                }
+                for (JsonElement sound : definition.getAsJsonArray("sounds")) {
+                    if (isSoundEventReference(sound)) {
+                        continue;
+                    }
+                    String soundPath = soundFilePath(namespace, sound);
+                    if (soundPath != null) {
+                        into.add(soundPath);
+                    }
+                }
+            }
+        } catch (Throwable e) {
+            PolymerPatcher.LOGGER.debug("Could not inspect {} for interactive music", path, e);
+        }
+    }
+
+    /**
+     * Removes file references which this same pack deliberately removes, plus broken references to
+     * files a mod never supplied. Keeping the JSON while dropping its audio is what produced thousands
+     * of identical client warnings on every resource reload.
+     */
+    private static PackResource sanitizeSoundTable(ResourcePackBuilder builder, String path, PackResource resource,
+                                                   List<String> excludedFolders, Set<String> interactiveMusic) {
+        try {
+            String namespace = path.split("/")[1];
+            JsonObject table = JsonParser.parseString(resource.asString()).getAsJsonObject().deepCopy();
+            List<String> emptyEvents = new ArrayList<>();
+            boolean changed = false;
+
+            for (var event : table.entrySet()) {
+                if (!event.getValue().isJsonObject()) {
+                    continue;
+                }
+                JsonObject definition = event.getValue().getAsJsonObject();
+                if (!definition.has("sounds") || !definition.get("sounds").isJsonArray()) {
+                    continue;
+                }
+
+                JsonArray sounds = definition.getAsJsonArray("sounds");
+                JsonArray kept = new JsonArray();
+                for (JsonElement sound : sounds) {
+                    String soundPath = soundFilePath(namespace, sound);
+                    if (isSoundEventReference(sound) || soundPath == null || soundFileWillExist(builder, soundPath,
+                        excludedFolders, interactiveMusic)) {
+                        kept.add(sound);
+                    } else {
+                        changed = true;
+                    }
+                }
+
+                if (kept.isEmpty() && !sounds.isEmpty()) {
+                    emptyEvents.add(event.getKey());
+                } else if (kept.size() != sounds.size()) {
+                    definition.add("sounds", kept);
+                }
+            }
+
+            emptyEvents.forEach(table::remove);
+            return changed ? PackResource.fromJson(table) : resource;
+        } catch (Throwable e) {
+            PolymerPatcher.LOGGER.debug("Could not sanitize sound table {}", path, e);
+            return resource;
+        }
+    }
+
+    private static boolean soundFileWillExist(ResourcePackBuilder builder, String path,
+                                              List<String> excludedFolders, Set<String> interactiveMusic) {
+        if (interactiveMusic.contains(path)) {
+            return true;
+        }
+        if (!excludedFolders.isEmpty() && isBackgroundSound(path, excludedFolders)) {
+            return false;
+        }
+
+        // Vanilla audio lives in the client's asset index rather than in the game jar or this pack.
+        // Its absence from the builder therefore says nothing. Other namespaces must supply a file.
+        String[] parts = path.split("/", 3);
+        if (parts.length >= 2 && parts[1].equals(Identifier.DEFAULT_NAMESPACE)) {
+            return true;
+        }
+        return builder.getDataOrSource(path) != null;
+    }
+
+    private static boolean isSoundEventReference(JsonElement sound) {
+        if (!sound.isJsonObject()) {
+            return false;
+        }
+        JsonElement type = sound.getAsJsonObject().get("type");
+        return type != null && type.isJsonPrimitive() && type.getAsJsonPrimitive().isString()
+            && "event".equals(type.getAsString());
+    }
+
+    /** Resolves a sounds.json entry to the resource-pack path of its .ogg, or null for malformed data. */
+    private static @org.jetbrains.annotations.Nullable String soundFilePath(String tableNamespace, JsonElement sound) {
+        try {
+            String name;
+            if (sound.isJsonPrimitive() && sound.getAsJsonPrimitive().isString()) {
+                name = sound.getAsString();
+            } else if (sound.isJsonObject() && sound.getAsJsonObject().has("name")) {
+                name = sound.getAsJsonObject().get("name").getAsString();
+            } else {
+                return null;
+            }
+            Identifier id = name.indexOf(':') >= 0
+                ? Identifier.parse(name)
+                : Identifier.fromNamespaceAndPath(tableNamespace, name);
+            String suffix = id.getPath().endsWith(".ogg") ? "" : ".ogg";
+            return "assets/" + id.getNamespace() + "/sounds/" + id.getPath() + suffix;
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     /**

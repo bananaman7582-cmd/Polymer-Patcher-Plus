@@ -82,7 +82,7 @@ public record PolyModelInstance<Entity extends net.minecraft.world.entity.Entity
                     }
 
 
-                    var b = ModelElement.builder(new Vec3(min.x, min.y, min.z).scale(0.25).add(8), new Vec3(max.x, max.y, max.z).scale(0.25).add(8));
+                    var b = ModelElement.builder(modelPoint(min), modelPoint(max));
 
                     var dir = Direction.getNearest((int) quad.normal().x(), (int) quad.normal().y(), (int) quad.normal().z(), null);
 
@@ -131,6 +131,20 @@ public record PolyModelInstance<Entity extends net.minecraft.world.entity.Entity
      */
     private static float uv(float normalized) {
         return Math.clamp(normalized * 16.0F, 0.0F, 16.0F);
+    }
+
+    /**
+     * Converts an entity-model vertex to an item-model coordinate accepted by a vanilla client.
+     * Vanilla rejects an entire generated model when even one element extends outside -16..32.
+     * Large modded model parts can cross that boundary (the Sculk Ghast does), so clipping the
+     * exceptional outer edge preserves the rest of the part instead of losing it completely.
+     */
+    private static Vec3 modelPoint(Vector3f point) {
+        return new Vec3(
+            Math.clamp(point.x * 0.25D + 8.0D, -16.0D, 32.0D),
+            Math.clamp(point.y * 0.25D + 8.0D, -16.0D, 32.0D),
+            Math.clamp(point.z * 0.25D + 8.0D, -16.0D, 32.0D)
+        );
     }
 
 }
