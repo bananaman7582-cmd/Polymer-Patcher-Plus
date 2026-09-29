@@ -61,6 +61,7 @@
 		"sync.SynchronizeRegistriesTaskAccessor",
 		"sync.SynchronizeRegistriesTaskMixin",
 		"sync.ServerCommonPacketListenerImplAccessor",
+		"sync.ServerCommonPacketListenerImplMixin",
 		"sync.DisplayInfoMixin",
 		"sync.EntityTooltipInfoAccessor",
 		"sync.ServerPlayerGameModeMixin",

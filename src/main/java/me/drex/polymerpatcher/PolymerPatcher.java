@@ -79,6 +79,7 @@ public class PolymerPatcher implements DedicatedServerModInitializer {
         me.drex.polymerpatcher.util.LogQuieter.install();
         me.drex.polymerpatcher.item.RecipeBookContents.init();
         me.drex.polymerpatcher.item.ConvertedMaps.init();
+        me.drex.polymerpatcher.item.MapDecorationFallbacks.init();
         me.drex.polymerpatcher.util.NativeItemSync.init();
         me.drex.polymerpatcher.block.fluid.ModdedFluidPhysics.init();
         me.drex.polymerpatcher.item.AirMiningFeedback.init();
