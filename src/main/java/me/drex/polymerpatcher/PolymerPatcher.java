@@ -59,6 +59,7 @@ public class PolymerPatcher implements DedicatedServerModInitializer {
         me.drex.polymerpatcher.compat.alexscaves.AlexsCavesBiomeLight.init();
         AlexsMobsCompatibility.init();
         EnderscapeCompatibility.init();
+        me.drex.polymerpatcher.compat.neverend.NeverendCompatibility.init();
         // Registered before the server starts, which is when auto-host looks its configured type up
         ResourcePackDataProvider.register(id("per_client"), PerClientPackProvider::new);
         PolymerResourcePackUtils.RESOURCE_PACK_CREATION_EVENT.register(ResourceHelper::init);
@@ -102,6 +103,7 @@ public class PolymerPatcher implements DedicatedServerModInitializer {
                 me.drex.polymerpatcher.util.ModdedMenus.forget(handler.getPlayer());
                 me.drex.polymerpatcher.util.NativeItemSync.forget(handler.getPlayer());
                 me.drex.polymerpatcher.block.fluid.ModdedFluidPhysics.forget(handler.getPlayer());
+                me.drex.polymerpatcher.compat.neverend.NeverendClientEffects.forget(handler.getPlayer());
 
                 me.drex.polymerpatcher.effect.ModdedEffectNotices.forget(handler.getPlayer());
             });
@@ -157,6 +159,7 @@ public class PolymerPatcher implements DedicatedServerModInitializer {
                 me.drex.polymerpatcher.entity.render.RenderCaptureRules.init();
                 me.drex.polymerpatcher.compat.alexscaves.AlexsCavesRenderRules.init();
                 AlexsMobsCompatibility.setupRendering();
+                me.drex.polymerpatcher.compat.neverend.NeverendCompatibility.setupRendering(renderRegistry);
                 // Before models are registered: each resolved player skin needs the same generated
                 // Borrowed Echo part models as the default skins already in the render dump.
                 me.drex.polymerpatcher.compat.borrowedecho.BorrowedEchoPlayerSkins.prepare(server);

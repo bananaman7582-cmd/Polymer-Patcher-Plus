@@ -49,6 +49,10 @@
 		{
 			"config": "polymer-patcher-enderscape.mixins.json",
 			"environment": "*"
+		},
+		{
+			"config": "polymer-patcher-neverend.mixins.json",
+			"environment": "server"
 		}
 	],
 	"accessWidener": "polymer-patcher.classtweaker",

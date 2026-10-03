@@ -1,10 +1,13 @@
 package me.drex.polymerpatcher.registry;
 
 import me.drex.polymerpatcher.util.BlockSyncCheck;
+import me.drex.polymerpatcher.block.CarrierStateSafety;
 import net.minecraft.SharedConstants;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
 import java.util.Set;
 
@@ -33,6 +36,17 @@ public final class BlockSyncSafetyCheck {
             "an ordinary modded block must not be readable raw");
         expect(!BlockSyncCheck.preservesArbitraryRawStateIds(),
             "block metadata must never preserve server-local raw state ids");
+
+        var dryStair = Blocks.OAK_STAIRS.defaultBlockState();
+        var wetStair = dryStair.setValue(BlockStateProperties.WATERLOGGED, true);
+        expect(CarrierStateSafety.isWaterSafeCarrier(dryStair, dryStair),
+            "a dry stair may use a dry carrier");
+        expect(!CarrierStateSafety.isWaterSafeCarrier(dryStair, wetStair),
+            "a dry stair must never use a waterlogged carrier");
+        expect(CarrierStateSafety.isWaterSafeCarrier(wetStair, dryStair),
+            "a wet source may degrade to a dry carrier when the wet pool is exhausted");
+        expect(CarrierStateSafety.isWaterSafeCarrier(wetStair, wetStair),
+            "a wet source may use a wet carrier");
         expect(Block.BLOCK_STATE_REGISTRY.size() == BlockSyncCheck.VANILLA_26_2_STATE_COUNT,
             "the embedded 26.2 client boundary must match the pristine game registry (expected "
                 + BlockSyncCheck.VANILLA_26_2_STATE_COUNT + ", found " + Block.BLOCK_STATE_REGISTRY.size() + ")");

@@ -158,6 +158,11 @@ public class RegistryPatcher {
             case "veiled_leaves" -> ParticleTypes.PALE_OAK_LEAVES;
             case "rustle_converting" -> ParticleTypes.HAPPY_VILLAGER;
 
+            // Neverend: preserve the expanding sonar/readout distinction with vanilla-safe effects.
+            case "sonar" -> ParticleTypes.SONIC_BOOM;
+            case "sonar_eye" -> ParticleTypes.ELECTRIC_SPARK;
+            case "orb" -> ParticleTypes.GLOW;
+
             // Sculk Horde. Crust is a speck of near-black sculk drifting for ten seconds, which vanilla's
             // ash is; a burrowed burst is a scatter of teal bits; the ancient dialect is a white glyph
             // hanging in place, which is what the enchanting table's glyphs are at zero speed

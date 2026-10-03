@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import eu.pb4.polymer.resourcepack.api.ResourcePackBuilder;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.Brightness;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemDisplayContext;
@@ -92,6 +93,9 @@ public final class RenderCaptureRules {
     @FunctionalInterface public interface RideOffsetRule {
         @Nullable Vec3 apply(Entity vehicle, Entity passenger);
     }
+    @FunctionalInterface public interface BrightnessRule {
+        @Nullable Brightness apply(Entity entity);
+    }
 
     private static final List<ItemRule> ITEM_RULES = new CopyOnWriteArrayList<>();
     private static final List<BlockRule> BLOCK_RULES = new CopyOnWriteArrayList<>();
@@ -107,6 +111,7 @@ public final class RenderCaptureRules {
     private static final List<OuterTextureRule> OUTER_TEXTURE_RULES = new CopyOnWriteArrayList<>();
     private static final List<ExtraModelTextureRule> EXTRA_MODEL_TEXTURE_RULES = new CopyOnWriteArrayList<>();
     private static final List<RideOffsetRule> RIDE_OFFSET_RULES = new CopyOnWriteArrayList<>();
+    private static final List<BrightnessRule> BRIGHTNESS_RULES = new CopyOnWriteArrayList<>();
     private static final List<Consumer<ResourcePackBuilder>> ASSET_GENERATORS = new CopyOnWriteArrayList<>();
 
     public static void registerItem(ItemRule rule) { ITEM_RULES.add(rule); }
@@ -123,6 +128,7 @@ public final class RenderCaptureRules {
     public static void registerOuterTexture(OuterTextureRule rule) { OUTER_TEXTURE_RULES.add(rule); }
     public static void registerExtraModelTexture(ExtraModelTextureRule rule) { EXTRA_MODEL_TEXTURE_RULES.add(rule); }
     public static void registerRideOffset(RideOffsetRule rule) { RIDE_OFFSET_RULES.add(rule); }
+    public static void registerBrightness(BrightnessRule rule) { BRIGHTNESS_RULES.add(rule); }
     public static void registerAssets(Consumer<ResourcePackBuilder> generator) { ASSET_GENERATORS.add(generator); }
 
     public static ItemStack item(Entity entity, ItemStack stack) {
@@ -240,6 +246,17 @@ public final class RenderCaptureRules {
             Vec3 offset = rule.apply(vehicle, passenger);
             if (offset != null) {
                 return offset;
+            }
+        }
+        return null;
+    }
+
+    /** Allows a renderer compat layer to preserve a deliberate light override from the native renderer. */
+    public static @Nullable Brightness brightness(Entity entity) {
+        for (BrightnessRule rule : BRIGHTNESS_RULES) {
+            Brightness brightness = rule.apply(entity);
+            if (brightness != null) {
+                return brightness;
             }
         }
         return null;

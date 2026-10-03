@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "package": "me.drex.polymerpatcher.mixin.neverend",
+  "plugin": "me.drex.polymerpatcher.compat.neverend.NeverendMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "minVersion": "0.8",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "mixins": [],
+  "client": []
+}

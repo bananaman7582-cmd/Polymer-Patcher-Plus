@@ -51,6 +51,8 @@ public class SimpleEntityModel<Entity extends net.minecraft.world.entity.Entity,
     public final RideAttachmentElement rideAttachment = new RideAttachmentElement();
     protected final Entity entity;
     protected final EntityRenderer<Entity, RenderState> renderer;
+    /** Renderer light overrides are type-stable; resolve once instead of once per model part per tick. */
+    private final net.minecraft.util.Brightness brightnessOverride;
 
     /** Carries this mob's stride between ticks, for the renderers that leave it at nothing. */
     protected final ServerRenderStates.Walk walk = new ServerRenderStates.Walk();
@@ -84,6 +86,7 @@ public class SimpleEntityModel<Entity extends net.minecraft.world.entity.Entity,
         super(entity);
         this.entity = entity;
         this.renderer = renderer;
+        this.brightnessOverride = me.drex.polymerpatcher.entity.render.RenderCaptureRules.brightness(entity);
         this.addElement(leadAttachment);
         this.addElement(rideAttachment);
     }
@@ -466,6 +469,9 @@ public class SimpleEntityModel<Entity extends net.minecraft.world.entity.Entity,
         element.setViewRange(modelViewRange(activeElements.size() + 1));
         applyCullBounds(element, dimensions.width(), dimensions.height());
         element.setOffset(new Vec3(0, dimensions.height() / 2, 0));
+        if (brightnessOverride != null) {
+            element.setBrightness(brightnessOverride);
+        }
         return element;
     }
 

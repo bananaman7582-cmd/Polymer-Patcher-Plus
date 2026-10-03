@@ -310,6 +310,14 @@ public record AutomaticFactoryBlock(
         Set<BlockState> requiresElementHolder = new HashSet<>();
         originalBlock.getStateDefinition().getPossibleStates().forEach(state -> {
                 BlockState mappedState = findMatchingState(id, state, parsedVariants, modelVariantCache, requiresElementHolder);
+                // A dry source sent as a wet vanilla carrier creates real client-side water. Keep this
+                // invariant at the boundary as well as in every allocator path, so a new fallback can
+                // never quietly turn stairs, slabs or leaves into water sources again.
+                if (!CarrierStateSafety.isWaterSafeCarrier(state, mappedState)) {
+                    PolymerPatcher.LOGGER.debug("Rejected waterlogged carrier {} for dry blockstate {}", mappedState, state);
+                    requiresElementHolder.add(state);
+                    mappedState = null;
+                }
                 mappedStates.put(state, mappedState);
             }
         );
@@ -620,11 +628,10 @@ public record AutomaticFactoryBlock(
                 }
             }
             // Nothing above could be had, so the block is drawn by a display and what is underneath it is
-            // only a shape to bump into. That shape still has to exist: the ranking above can now come
-            // back with nothing at all - a dry block whose only shape match is kelp is ruled out of every
-            // candidate it has - and returning nothing here would leave the block a barrier, which is
-            // worse than any carrier. So the last resort is allowed to break the rules the ranking will
-            // not, taking the least bad of what is left rather than none of it.
+            // only a shape to bump into. A last resort may relax cosmetic/interaction preferences, but it
+            // must not put actual client-side water in a dry block. If no dry carrier remains, returning
+            // null deliberately falls back to a barrier underneath the display; an imperfect collision
+            // box is much less destructive than flooding an entire stair build on vanilla clients.
             Set<BlockModelType> blockModelTypes = pickBlockModelTypeCandidate(id, originalState, blockModelTypeCandidates);
             if (blockModelTypes.isEmpty()) {
                 blockModelTypes = lastResortCandidates(originalState, blockModelTypeCandidates);
@@ -687,7 +694,8 @@ public record AutomaticFactoryBlock(
             Block block = candidate.getBlock();
             if (candidate.isAir() || block instanceof LiquidBlock || HURTS.contains(block)
                 || candidate.hasBlockEntity() || block instanceof ButtonBlock || block instanceof PressurePlateBlock
-                || block instanceof FenceGateBlock || block instanceof DoorBlock || block instanceof TrapDoorBlock) {
+                || block instanceof FenceGateBlock || block instanceof DoorBlock || block instanceof TrapDoorBlock
+                || !CarrierStateSafety.isWaterSafeCarrier(original, candidate)) {
                 continue;
             }
             safe.add(candidate);
@@ -957,19 +965,17 @@ public record AutomaticFactoryBlock(
     /**
      * What to stand a display on when every carrier that could have been used was ruled out.
      * <p>
-     * The two absolute rules above exist because a carrier that burns the player, or fills itself with
-     * water, is worse than being drawn on a slightly wrong shape. Neither is worse than having no shape at
-     * all, though, and that is the alternative here - a block with no stand-in is sent as a barrier, which
-     * is invisible and solid and is exactly what a player reports as "that block has no texture".
-     * <p>
-     * So this keeps everything and only sorts it, worst last: a carrier that hurts is taken before nothing
-     * is taken, and a waterlogged one before a harmful one.
+     * Cosmetic preferences can be relaxed here, but wet-for-dry cannot: waterlogging is client behaviour,
+     * not a visual imperfection. Wet sources may still use dry carriers if that is all that remains.
      */
     private static Set<BlockModelType> lastResortCandidates(BlockState original, Set<BlockModelType> candidates) {
         boolean waterLogged = original.getValueOrElse(BlockStateProperties.WATERLOGGED, false)
             || (original.getFluidState().getType() == net.minecraft.world.level.material.Fluids.WATER);
 
         List<BlockModelType> ordered = new ArrayList<>(candidates);
+        if (!waterLogged) {
+            ordered.removeIf(WATERLOGGED::contains);
+        }
         ordered.sort(Comparator.comparingInt(candidate ->
             (MODEL_TYPE_HARMFUL.getOrDefault(candidate, false) ? 2 : 0)
                 + (WATERLOGGED.contains(candidate) != waterLogged ? 1 : 0)));
@@ -1058,6 +1064,12 @@ public record AutomaticFactoryBlock(
 
     @Override
     public BlockState getPolymerBlockState(BlockState blockState, PacketContext packetContext) {
+        // A client-only renderer can still have an exact vanilla semantic carrier. Compat packages
+        // register that fact here instead of teaching the global allocator mod or block names.
+        BlockState presentationCarrier = BlockPresentationRules.carrier(blockState);
+        if (presentationCarrier != null) {
+            return presentationCarrier;
+        }
         // RenderShape.INVISIBLE is an explicit semantic promise from the block, not an absent model.
         // Alex's Caves' Ambersol light is the first conspicuous example: it deliberately has a cube
         // model in its assets for particles/items, while its placed block renderer returns INVISIBLE.
@@ -1083,12 +1095,16 @@ public record AutomaticFactoryBlock(
             return Blocks.BARRIER.defaultBlockState();
         }
         BlockState mappedState = mappedStates.get(blockState);
-        if (mappedState != null) return mappedState;
+        if (mappedState != null && CarrierStateSafety.isWaterSafeCarrier(blockState, mappedState)) return mappedState;
         return Blocks.BARRIER.defaultBlockState();
     }
 
     @Override
     public @Nullable ElementHolder createElementHolder(ServerLevel world, BlockPos pos, BlockState initialBlockState) {
+        ElementHolder semantic = BlockPresentationRules.holder(world, pos, initialBlockState);
+        if (semantic != null) {
+            return semantic;
+        }
         ElementHolder geckoLib = GeckoLibBlockModels.modelFor(initialBlockState, world, pos);
         if (geckoLib != null) {
             return geckoLib;
@@ -1130,7 +1146,8 @@ public record AutomaticFactoryBlock(
 
     @Override
     public boolean tickElementHolder(ServerLevel world, BlockPos pos, BlockState initialBlockState) {
-        return AmbientBlockEffects.supports(initialBlockState)
+        return BlockPresentationRules.ticks(initialBlockState)
+            || AmbientBlockEffects.supports(initialBlockState)
             || ShowcaseBlocks.showsWhatIsInside(initialBlockState)
             || GeckoLibBlockModels.isDrawnHere(initialBlockState);
     }

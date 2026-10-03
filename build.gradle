@@ -242,6 +242,12 @@ tasks.register("verifyClientSafeStats", JavaExec) {
 	mainClass = "me.drex.polymerpatcher.registry.ClientSafeStatsCheck"
 }
 
+tasks.register("verifyNeverendPresentation", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.compat.neverend.NeverendPresentationCheck"
+}
+
 tasks.named("test") {
 	// This source set contains a standalone executable verifier, not a JUnit/TestNG class.
 	failOnNoDiscoveredTests = false
@@ -260,6 +266,7 @@ tasks.named("check") {
 	dependsOn tasks.named("verifyBorrowedEchoPresentation")
 	dependsOn tasks.named("verifyMapDecorationFallbacks")
 	dependsOn tasks.named("verifyClientSafeStats")
+	dependsOn tasks.named("verifyNeverendPresentation")
 }
 
 loom {
