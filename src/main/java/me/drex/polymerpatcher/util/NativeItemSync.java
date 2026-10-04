@@ -15,6 +15,7 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.context.PacketContext;
 import net.fabricmc.fabric.api.resource.v1.pack.ModPackResources;
+import net.fabricmc.fabric.impl.networking.ChannelInfoHolder;
 import net.fabricmc.fabric.impl.registry.sync.RegistrySyncManager;
 import net.fabricmc.fabric.impl.registry.sync.packet.RegistrySyncPayload;
 import net.fabricmc.loader.api.FabricLoader;
@@ -22,6 +23,7 @@ import net.fabricmc.loader.api.metadata.ModMetadata;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.Connection;
+import net.minecraft.network.ConnectionProtocol;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
@@ -79,9 +81,10 @@ import java.util.stream.Collectors;
  * stand-ins, which is why a client missing a mod still joins exactly as before.
  * <p>
  * <b>Different versions.</b> A client that did not answer yes for a content mod might simply not have it,
- * which is fine. Once it is in the game it names the mods it has by the channels it opens, and one that
- * opens a channel for a mod it did not have at this server's version has that mod at another version. It is
- * disconnected with a screen saying exactly which version to install.
+ * which is fine. It names the mods it has by the channels it opens, and one that opens a channel for a mod
+ * it did not have at this server's version has that mod at another version. It is disconnected with a
+ * screen saying exactly which version to install - while it is still joining, wherever it can be, because
+ * that screen does not survive being sent once the game has started. See {@link #refuseWhileConfiguring}.
  */
 public final class NativeItemSync {
     private NativeItemSync() {
@@ -373,10 +376,60 @@ public final class NativeItemSync {
     }
 
     /**
-     * Disconnects a player who has turned out to have one of this server's content mods at another version.
+     * Disconnects a joining client that has one of this server's content mods at another version, before it
+     * has left configuration. True when it was disconnected, and nothing more should be done for it.
+     * <p>
+     * This is where the refusal has to happen for its screen to be seen at all. Turned away once in the
+     * game, the server logged the reason and the player saw nothing but "Disconnected": by then they are
+     * being sent their spawn, and - having opened that mod's channels - the real content of the very mod
+     * whose version is wrong, and the screen with the reason on it never made it through. An ordinary kick
+     * later on shows its reason perfectly well; it is the moment that was wrong, not the message.
+     * <p>
+     * A Fabric client lists every channel it can receive in the game while it is still being configured -
+     * the common register exchange, which Fabric runs before the known-packs question is even asked - so
+     * by the time that answer is read here, both halves are known: which mods it has not got at this
+     * server's version, and which of those it has at all. A client that does not take part in that exchange
+     * lists nothing here, and is caught by {@link #refuseIfDifferent} once in the game instead.
+     */
+    public static boolean refuseWhileConfiguring(ServerConfigurationPacketListenerImpl handler) {
+        try {
+            UUID id = ownerId(handler);
+            Map<String, String> notMatching = id == null ? null : NOT_MATCHING.get(id);
+            if (notMatching == null || !ConfigManager.config().entities.refuseMismatchedMods) {
+                return false;
+            }
+
+            // The channels it will receive in the game, waiting for the game to start. A copy, because Fabric
+            // still owns the set, and its configuration channels besides - a mod's channel either way says the
+            // mod is there
+            Set<Identifier> channels = new HashSet<>(ServerConfigurationNetworking.getSendable(handler));
+            if (connectionOf(handler) instanceof ChannelInfoHolder holder) {
+                channels.addAll(List.copyOf(holder.fabric_getPendingChannelsNames(ConnectionProtocol.PLAY)));
+            }
+
+            Map<String, String> theirs = mismatched(notMatching, channels);
+            if (theirs.isEmpty() || NOT_MATCHING.remove(id) == null) {
+                return false;
+            }
+
+            PolymerPatcher.LOGGER.warn("Disconnecting {} while they join: their client has {} at a different version. This server runs {}.",
+                ownerName(handler), theirs.keySet(), String.join(", ", theirs.values()));
+            handler.disconnect(refusal(theirs));
+            return true;
+        } catch (Throwable e) {
+            // Not knowing here only means finding out once they are in the game, as before
+            PolymerPatcher.LOGGER.debug("Could not check a joining client's mod versions while it was configured", e);
+            return false;
+        }
+    }
+
+    /**
+     * Disconnects a player who has turned out, once in the game, to have one of this server's content mods
+     * at another version.
      * <p>
      * Only a mod they did not have at this server's version and have now opened a channel for counts. A mod
-     * they simply do not have opens no channel, and never gets here.
+     * they simply do not have opens no channel, and never gets here. Most clients are refused while joining,
+     * by {@link #refuseWhileConfiguring}; this is for the ones that did not list their channels then.
      */
     private static void refuseIfDifferent(ServerGamePacketListenerImpl handler, MinecraftServer server, Collection<Identifier> channels) {
         UUID id = handler.getPlayer().getUUID();
@@ -387,13 +440,7 @@ public final class NativeItemSync {
             return;
         }
 
-        Map<String, String> theirs = new TreeMap<>();
-        for (Identifier channel : channels) {
-            String needed = notMatching.get(channel.getNamespace());
-            if (needed != null) {
-                theirs.put(channel.getNamespace(), needed);
-            }
-        }
+        Map<String, String> theirs = mismatched(notMatching, channels);
         // Removed on the way out, so a player is only ever refused once however many channels follow
         if (theirs.isEmpty() || NOT_MATCHING.remove(id) == null) {
             return;
@@ -401,10 +448,26 @@ public final class NativeItemSync {
 
         PolymerPatcher.LOGGER.warn("Disconnecting {}: their client has {} at a different version. This server runs {}.",
             handler.getPlayer().getGameProfile().name(), theirs.keySet(), String.join(", ", theirs.values()));
-        Component reason = Component.literal("Your mods don't match this server.\n\n"
+        REFUSALS.put(handler, new Refusal(refusal(theirs), REFUSAL_DELAY_TICKS));
+    }
+
+    /** Of the mods a client lacks at this server's version, the ones it has a channel for - so has at another. */
+    private static Map<String, String> mismatched(Map<String, String> notMatching, Collection<Identifier> channels) {
+        Map<String, String> theirs = new TreeMap<>();
+        for (Identifier channel : channels) {
+            String needed = notMatching.get(channel.getNamespace());
+            if (needed != null) {
+                theirs.put(channel.getNamespace(), needed);
+            }
+        }
+        return theirs;
+    }
+
+    /** The screen a refused player sees, naming each version they need. */
+    private static Component refusal(Map<String, String> theirs) {
+        return Component.literal("Your mods don't match this server.\n\n"
             + (theirs.size() == 1 ? "Install this version to join:\n" : "Install these versions to join:\n")
             + String.join("\n", theirs.values()));
-        REFUSALS.put(handler, new Refusal(reason, REFUSAL_DELAY_TICKS));
     }
 
     /**

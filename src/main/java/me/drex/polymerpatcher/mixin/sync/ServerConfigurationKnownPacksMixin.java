@@ -46,18 +46,26 @@ public abstract class ServerConfigurationKnownPacksMixin extends ServerCommonPac
     /**
      * After the move to the server thread - the packet arrives on the network thread first, and this method
      * is entered there once before being handed over - and before the answer is acted on, which sends the tags.
+     * <p>
+     * A client this answer shows to have one of the mods at another version is turned away right here, and
+     * the answer is not acted on: nothing more is sent after the screen telling them why.
      */
     @Inject(method = "handleSelectKnownPacks", at = @At(value = "INVOKE",
         target = "Lnet/minecraft/network/protocol/PacketUtils;ensureRunningOnSameThread(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketListener;Lnet/minecraft/network/PacketProcessor;)V",
-        shift = At.Shift.AFTER))
+        shift = At.Shift.AFTER), cancellable = true)
     private void polymerPatcher$readKnownPacks(ServerboundSelectKnownPacks packet, CallbackInfo callback) {
         this.polymerPatcher$itemSync = null;
         if (this.synchronizeRegistriesTask == null) {
             // Vanilla refuses the packet on the next line
             return;
         }
-        this.polymerPatcher$itemSync = NativeItemSync.knownPacksReceived((ServerConfigurationPacketListenerImpl) (Object) this, this.server,
+        ServerConfigurationPacketListenerImpl self = (ServerConfigurationPacketListenerImpl) (Object) this;
+        this.polymerPatcher$itemSync = NativeItemSync.knownPacksReceived(self, this.server,
             ((SynchronizeRegistriesTaskAccessor) this.synchronizeRegistriesTask).polymerPatcher$requestedPacks(), packet.knownPacks());
+        if (NativeItemSync.refuseWhileConfiguring(self)) {
+            this.polymerPatcher$itemSync = null;
+            callback.cancel();
+        }
     }
 
     /** Just before the registry step finishes and the next step starts, so the item sync can be that next step. */
