@@ -33,8 +33,34 @@ final class SelfTest {
     private static int next;
     private static int resumeAt;
     private static int shift;
+    private static boolean reportedScreen;
+
+    /** Stands in for a payload of a mod this client does not really have; never actually received. */
+    private record FakePayload(net.minecraft.network.protocol.common.custom.CustomPacketPayload.Type<FakePayload> type) implements net.minecraft.network.protocol.common.custom.CustomPacketPayload {
+    }
 
     static void init() {
+        // Opens a channel in some other mod's name, so the client looks as if it had that mod at another
+        // version than the server's - which is what the server's version check is there to catch
+        // Given as "late:<channel>", it is only opened once in the game, the way a client that did not list its
+        // channels while joining would open it
+        String fakeChannel = System.getProperty("polymerpatcher.companion.fakechannel");
+        if (fakeChannel != null && !fakeChannel.isBlank()) {
+            boolean late = fakeChannel.startsWith("late:");
+            var type = new net.minecraft.network.protocol.common.custom.CustomPacketPayload.Type<FakePayload>(
+                net.minecraft.resources.Identifier.parse(late ? fakeChannel.substring(5) : fakeChannel));
+            net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry.clientboundPlay().register(type,
+                net.minecraft.network.codec.StreamCodec.unit(new FakePayload(type)));
+            if (late) {
+                ClientPlayConnectionEvents.JOIN.register((handler, sender, client) ->
+                    net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.registerReceiver(type, (payload, context) -> {
+                    }));
+            } else {
+                net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.registerGlobalReceiver(type, (payload, context) -> {
+                });
+            }
+        }
+
         String spec = System.getProperty("polymerpatcher.companion.selftest");
         if (spec == null) {
             return;
@@ -46,6 +72,11 @@ final class SelfTest {
         net.fabricmc.fabric.api.client.networking.v1.ClientConfigurationConnectionEvents.DISCONNECT.register((handler, client) -> stopAt = sinceStart + 100);
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             sinceStart++;
+            // What a player turned away would actually read, rather than what the server meant to say
+            if (client.gui.screen() instanceof net.minecraft.client.gui.screens.DisconnectedScreen screen && !reportedScreen) {
+                reportedScreen = true;
+                CompanionMod.LOGGER.info("selftest: disconnect screen says: {}", screen.getNarrationMessage().getString().replace("\n", " | "));
+            }
             if (sinceStart == 20 * 60 * 10 || sinceStart == stopAt) {
                 CompanionMod.LOGGER.info("selftest: stopping (disconnected or out of time)");
                 client.stop();

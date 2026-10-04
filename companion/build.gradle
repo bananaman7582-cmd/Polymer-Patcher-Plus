@@ -60,6 +60,9 @@ loom {
 			runDir (System.getenv("PP_RUNDIR") ?: "run")
 			// 26.2 has no intermediary, so the game and the mods are all in the one set of names
 			property "fabric.runtimeMappingNamespace", "named"
+			if (System.getenv("PP_FAKECHANNEL") != null) {
+				property "polymerpatcher.companion.fakechannel", System.getenv("PP_FAKECHANNEL")
+			}
 			if (System.getenv("PP_SELFTEST") != null) {
 				property "polymerpatcher.companion.selftest", System.getenv("PP_SELFTEST")
 			}
