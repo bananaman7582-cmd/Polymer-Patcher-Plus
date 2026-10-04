@@ -67,7 +67,6 @@ public final class ModdedFluidPhysics {
         Map<BlockPos, BlockState> physics = new HashMap<>();
         Map<BlockPos, FluidSkin> skins = new HashMap<>();
         AABB box = player.getBoundingBox().deflate(1.0E-4);
-        BlockPos cameraCell = BlockPos.containing(player.getEyePosition());
 
         int minX = Mth.floor(box.minX);
         int maxX = Mth.floor(box.maxX);
@@ -86,15 +85,11 @@ public final class ModdedFluidPhysics {
                         BlockPos immutable = pos.immutable();
                         wanted.add(immutable);
                         physics.put(immutable, patch.physicsCarrier(actual));
-                        // The occupied model has inward-facing sheets so it can hide the temporary water
-                        // carrier from inside. Putting those sheets in the camera's own cell encloses the
-                        // eyes in a coloured cube and makes the liquid effectively opaque. Keep water in
-                        // this cell for swimming/fog, but do not put display geometry around the camera.
-                        // A vanilla-only client cannot receive a custom per-fluid fog colour, but seeing
-                        // through vanilla water fog is considerably closer than seeing nothing at all.
-                        if (!immutable.equals(cameraCell)) {
-                            skins.put(immutable, new FluidSkin(patch, actual));
-                        }
+                        // Cover every locally-water cell, including the one containing the camera. Leaving
+                        // that one bare exposes the backs of the surrounding one-sided surface models; from
+                        // inside the liquid it looks like rectangular holes through to the ground. The
+                        // occupied model already has inward-facing sheets specifically for this view.
+                        skins.put(immutable, new FluidSkin(patch, actual));
                     }
                 }
             }
@@ -109,8 +104,6 @@ public final class ModdedFluidPhysics {
         // This stays bounded by the player's body, not the size of the surrounding lake.
         Map<BlockPos, Overlay> overlays = OVERLAYS.computeIfAbsent(player.getUUID(), ignored -> new HashMap<>());
         overlays.entrySet().removeIf(entry -> {
-            // The camera cell deliberately remains water-only. Remove a skin left there by the
-            // previous tick as soon as the player's eyes cross a block boundary.
             if (skins.containsKey(entry.getKey())) {
                 return false;
             }
@@ -118,8 +111,8 @@ public final class ModdedFluidPhysics {
             return true;
         });
         for (Map.Entry<BlockPos, FluidSkin> entry : skins.entrySet()) {
-            // Use every locally-water cell for connectivity, including the deliberately unskinned camera
-            // cell. Otherwise the cell below the player's eyes grows a false top face inside a deep pool.
+            // Use every locally-water cell for connectivity. Otherwise the cell below the player's eyes
+            // grows a false top face inside a deep pool.
             int open = openSides(entry.getKey(), wanted);
             Overlay overlay = overlays.get(entry.getKey());
             if (overlay == null || !overlay.matchesLevel((ServerLevel) player.level())) {

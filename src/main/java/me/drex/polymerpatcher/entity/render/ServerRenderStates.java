@@ -57,6 +57,54 @@ public final class ServerRenderStates {
     }
 
     /**
+     * Which way one mob is pointing, eased from tick to tick the way a client eases it.
+     * <p>
+     * A client never shows a mob's rotation as the server has it. It is told the new rotation and turns
+     * towards it over three ticks, which hides everything a mob's controls do to it between one tick and
+     * the next. Those can be violent: Neverend's Grandgousier swims by swinging its body up to ninety
+     * degrees in a tick, and its look control then points its head and pitch somewhere else entirely in
+     * the same tick. Read raw, that is a fish that snaps between two directions every tick - and its model
+     * turns its whole body by the head and pitch, so it thrashed through every angle at once. Eased the
+     * way a client eases it, it swims.
+     */
+    public static final class Turn {
+        /** The share of the remaining turn taken each tick: a third, as a client's three-tick ease. */
+        private static final float EASE = 1.0F / 3.0F;
+
+        private float body;
+        private float head;
+        private float pitch;
+        private boolean started;
+
+        /** Once per server tick, however often the model itself is posed. */
+        public void observe(Entity entity) {
+            if (!(entity instanceof LivingEntity alive)) {
+                return;
+            }
+            if (!started) {
+                body = alive.yBodyRot;
+                head = alive.getYHeadRot();
+                pitch = alive.getXRot();
+                started = true;
+                return;
+            }
+            body += Mth.wrapDegrees(alive.yBodyRot - body) * EASE;
+            head += Mth.wrapDegrees(alive.getYHeadRot() - head) * EASE;
+            pitch += (alive.getXRot() - pitch) * EASE;
+        }
+
+        /** Puts the eased rotation in place of the raw one {@link #applyRotations} gave. */
+        public void apply(EntityRenderState state) {
+            if (!started || !(state instanceof LivingEntityRenderState living)) {
+                return;
+            }
+            living.bodyRot = body;
+            living.yRot = Mth.wrapDegrees(head - body);
+            living.xRot = pitch;
+        }
+    }
+
+    /**
      * Keeps the walking figure for one mob between ticks.
      * <p>
      * A mob's stride is a running total rather than a reading, so it has to be carried from tick to

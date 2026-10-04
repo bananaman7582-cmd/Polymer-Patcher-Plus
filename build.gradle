@@ -101,6 +101,8 @@ sourceSets {
     }
 }
 sourceSets.main.resources.srcDir(vanillaStateMapOutputDir)
+// The manifest and handshake the companion client mod shares word for word with this server
+sourceSets.main.java.srcDir "companion-shared/src/main/java"
 
 tasks.register("generateVanillaBlockStateMap", JavaExec) {
     dependsOn tasks.named("compileStateMapGeneratorJava")
@@ -152,6 +154,17 @@ tasks.named("jar") {
 	archiveVersion = providers.provider { project.version.toString() }
 }
 
+project(":companion").afterEvaluate { companionProject ->
+	companionProject.tasks.named("processResources") {
+		mustRunAfter rootProject.tasks.named("bumpVersion")
+		outputs.upToDateWhen { false }
+	}
+	companionProject.tasks.named("jar") {
+		mustRunAfter rootProject.tasks.named("bumpVersion")
+		archiveVersion = companionProject.providers.provider { companionProject.version.toString() }
+	}
+}
+
 project(":client-dump").afterEvaluate { clientProject ->
 	clientProject.tasks.named("processResources") {
 		mustRunAfter rootProject.tasks.named("bumpVersion")
@@ -186,6 +199,24 @@ tasks.register("verifyHeldItemPresentations", JavaExec) {
 	dependsOn tasks.named("testClasses")
 	classpath = sourceSets.test.runtimeClasspath
 	mainClass = "me.drex.polymerpatcher.item.HeldItemPresentationCheck"
+}
+
+tasks.register("verifyArmorEnchantability", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.item.ArmorEnchantabilityCheck"
+}
+
+tasks.register("verifyEquipmentPresentations", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.item.EquipmentPresentationsCheck"
+}
+
+tasks.register("verifyGliderFallbacks", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.resources.GliderFallbacksCheck"
 }
 
 tasks.register("verifyFluidModels", JavaExec) {
@@ -224,6 +255,12 @@ tasks.register("verifyAutomaticMenuLayout", JavaExec) {
 	mainClass = "me.drex.polymerpatcher.util.AutomaticMenuLayoutCheck"
 }
 
+tasks.register("verifyImbuingUi", JavaExec) {
+	dependsOn tasks.named("testClasses")
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = "me.drex.polymerpatcher.compat.illagerinvasion.ImbuingUiCheck"
+}
+
 tasks.register("verifyBorrowedEchoPresentation", JavaExec) {
 	dependsOn tasks.named("testClasses")
 	classpath = sourceSets.test.runtimeClasspath
@@ -256,6 +293,9 @@ tasks.named("test") {
 tasks.named("check") {
 	dependsOn tasks.named("verifyAlexsCavesHeldItemTransforms")
 	dependsOn tasks.named("verifyHeldItemPresentations")
+	dependsOn tasks.named("verifyArmorEnchantability")
+	dependsOn tasks.named("verifyEquipmentPresentations")
+	dependsOn tasks.named("verifyGliderFallbacks")
 	dependsOn tasks.named("verifyFluidModels")
 	dependsOn tasks.named("verifyReadableRegistryData")
 	dependsOn tasks.named("verifyBlockSyncSafety")
@@ -263,6 +303,7 @@ tasks.named("check") {
 	dependsOn tasks.named("verifyEntityModelAnimation")
 	dependsOn tasks.named("verifyNuclearFurnaceUi")
 	dependsOn tasks.named("verifyAutomaticMenuLayout")
+	dependsOn tasks.named("verifyImbuingUi")
 	dependsOn tasks.named("verifyBorrowedEchoPresentation")
 	dependsOn tasks.named("verifyMapDecorationFallbacks")
 	dependsOn tasks.named("verifyClientSafeStats")

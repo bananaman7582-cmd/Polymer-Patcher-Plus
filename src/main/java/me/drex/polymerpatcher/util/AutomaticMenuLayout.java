@@ -31,6 +31,15 @@ public final class AutomaticMenuLayout {
     }
 
     /**
+     * A replacement menu is opened before the original menu is attached to the player, so its
+     * {@code DataSlot}s are never sent to the vanilla client. They may safely remain server-side
+     * visual state; custom menu buttons cannot, because a generic client has no matching controls.
+     */
+    public static boolean canSafelyBridgeControlState(int dataSlotCount, boolean buttonDriven) {
+        return dataSlotCount >= 0 && !buttonDriven;
+    }
+
+    /**
      * Accepts only layouts a vanilla 9-wide container can describe without lying about a click target.
      */
     public static Optional<Layout> analyze(List<SlotPoint> slots) {
@@ -99,10 +108,18 @@ public final class AutomaticMenuLayout {
     }
 
     private static boolean at(SlotPoint slot, int x, int y) {
-        return near(slot.x(), x) && near(slot.y(), y);
+        return at(slot, x, y, TOLERANCE);
+    }
+
+    private static boolean at(SlotPoint slot, int x, int y, int tolerance) {
+        return near(slot.x(), x, tolerance) && near(slot.y(), y, tolerance);
     }
 
     private static boolean near(int actual, int expected) {
-        return Math.abs(actual - expected) <= TOLERANCE;
+        return near(actual, expected, TOLERANCE);
+    }
+
+    private static boolean near(int actual, int expected, int tolerance) {
+        return Math.abs(actual - expected) <= tolerance;
     }
 }

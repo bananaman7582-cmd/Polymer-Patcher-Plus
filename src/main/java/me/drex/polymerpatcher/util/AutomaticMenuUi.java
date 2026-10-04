@@ -21,10 +21,10 @@ final class AutomaticMenuUi extends RedirectedMenuGui {
 
     static Optional<AutomaticMenuUi> create(ServerPlayer player, AbstractContainerMenu menu,
                                             Identifier menuId, net.minecraft.network.chat.Component title) {
-        // Generic chest menus have no client-side data slots. A mod menu with even one DataSlot is a
-        // stateful machine, not a plain inventory, even when its slot coordinates happen to line up
-        // with a 9-wide grid. Forwarding one of its property updates to a generic menu makes an
-        // unmodified client index an empty data-slot list and disconnect with a protocol error.
+        // The replacement is installed before the original menu's initMenu call. Its DataSlots are
+        // therefore never attached or forwarded to the generic client, which makes server-only gauges
+        // safe to ignore. A custom menu button is different: the client has no control capable of
+        // producing that interaction, so button-driven screens remain outside automatic conversion.
         int dataSlotCount = ((AbstractContainerMenuAccessor) menu).polymerPatcher$dataSlots().size();
         boolean buttonDriven;
         try {
@@ -34,9 +34,7 @@ final class AutomaticMenuUi extends RedirectedMenuGui {
         } catch (ReflectiveOperationException exception) {
             return Optional.empty();
         }
-        // A button-driven screen cannot be represented by slots alone either. Reject both kinds of
-        // machine state even when their slot geometry happens to resemble a chest.
-        if (!AutomaticMenuLayout.canRepresentControlState(dataSlotCount, buttonDriven)) {
+        if (!AutomaticMenuLayout.canSafelyBridgeControlState(dataSlotCount, buttonDriven)) {
             return Optional.empty();
         }
 

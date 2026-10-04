@@ -18,8 +18,6 @@ import net.minecraft.world.item.ItemUseAnimation;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.entity.LivingEntity;
 import eu.pb4.polymer.common.api.PolymerCommonUtils;
-import net.minecraft.world.item.ShieldItem;
-import net.minecraft.world.item.equipment.Equippable;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.world.level.block.state.BlockState;
@@ -78,22 +76,10 @@ public record PolyBaseItem(Item item) implements PolymerItem {
             .ifPresent(components -> {
                 components.remove("minecraft:damage");
                 Identifier id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(original.getItem());
-                if (id == null || !id.getNamespace().equals("alexscaves")) {
-                    return;
+                if (id != null) {
+                    components.getCompound("minecraft:custom_data").ifPresent(data ->
+                        StackIdentitySanitizers.sanitize(original, id, data));
                 }
-                components.getCompound("minecraft:custom_data").ifPresent(data -> {
-                    if (id.getPath().equals("shot_gum")) {
-                        for (String key : java.util.List.of("PrevShootTime", "ShootTime",
-                            "PrevCrankAngle", "CrankAngle", "Shooting", "Gumballs")) {
-                            data.remove(key);
-                        }
-                    } else if (id.getPath().equals("raygun")) {
-                        for (String key : java.util.List.of("PrevUseTime", "UseTime", "ChargeUsed",
-                            "PrevRayX", "PrevRayY", "PrevRayZ", "RayX", "RayY", "RayZ")) {
-                            data.remove(key);
-                        }
-                    }
-                });
             });
         out.set(DataComponents.CUSTOM_DATA, CustomData.of(root));
         return out;
@@ -147,29 +133,11 @@ public record PolyBaseItem(Item item) implements PolymerItem {
             return Items.FILLED_MAP;
         }
 
-        if (item instanceof ShieldItem || itemStack.has(DataComponents.BLOCKS_ATTACKS)) {
-            return Items.SHIELD;
-        }
-
-        // Both capabilities are component-defined in modern Minecraft. Choosing the matching vanilla
-        // carrier makes client prediction and built-in rendering take their native paths, while
-        // Polymer keeps the mod item's own model and equipment asset components.
-        if (itemStack.has(DataComponents.GLIDER)) {
-            return Items.ELYTRA;
-        }
-
-        // Keep armour on the client's native animated equipment path. The real EQUIPPABLE component
-        // is copied below by Polymer, including the mod's equipment asset and texture. An armour
-        // carrier also remains compatible with client render optimizers that still check item type.
-        Equippable equippable = itemStack.get(DataComponents.EQUIPPABLE);
-        if (equippable != null) {
-            return switch (equippable.slot()) {
-                case HEAD -> Items.IRON_HELMET;
-                case CHEST -> Items.IRON_CHESTPLATE;
-                case LEGS -> Items.IRON_LEGGINGS;
-                case FEET -> Items.IRON_BOOTS;
-                default -> Items.TRIAL_KEY;
-            };
+        // Component-defined equipment follows native client behavior without any mod list. Gliders
+        // are checked before generic chest equipment so they remain real Elytra carriers.
+        Item equipmentCarrier = EquipmentPresentations.carrier(itemStack);
+        if (equipmentCarrier != null) {
+            return equipmentCarrier;
         }
 
         // Some custom tools deliberately use no vanilla use animation, but still need the ordinary
@@ -286,6 +254,7 @@ public record PolyBaseItem(Item item) implements PolymerItem {
         HeldItemPresentations.modifyItemStack(out, stack);
         me.drex.polymerpatcher.resources.ItemTintFallbacks.modifyItemStack(out, stack, context);
         me.drex.polymerpatcher.resources.EquipmentFallbacks.modifyItemStack(out, stack);
+        me.drex.polymerpatcher.resources.GliderFallbacks.modifyItemStack(out, stack);
 
         // Sent as an explorer map to the cave biome: a real map, centred there and marked with a
         // cross, which fills itself in and shows the player where they are as they walk

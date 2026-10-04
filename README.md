@@ -60,6 +60,28 @@ Server only. Players do not need to install anything.
 Mod-specific support exists for Alex's Caves, Alex's Mobs, Enderscape, Borrowed Echo and Sculk Horde. Other mods
 are handled by the generic systems above.
 
+## Optional: Polymer Patcher++ Client
+
+Players can install a small client mod, `polymer-patcher-plus-plus-client-<version>.jar`, next to Polymer
+(polymer-bundled) and Fabric API. Nobody has to; players without it see exactly what they did before.
+
+1. Join the server once. The server sends a description of every modded block and fluid, and the client saves it.
+2. Restart Minecraft. The game only accepts new blocks while it starts, so the client registers them then.
+3. Join again. For that player, every modded block is now a **real block** instead of a re-skinned vanilla
+   carrier or a display entity:
+   - its own shape and collision, so stairs, slabs, walls and plants are solid exactly where they look solid;
+   - its own light, sounds and hardness, so the cracks, the mining speed and the right tool match the real block;
+   - its own model from the pack, drawn as part of the world (no display entities, nothing vanishing at a distance);
+   - modded fluids are real fluids that flow and that you can swim in;
+   - mods that read blocks on the client - Jade, Presence Footsteps - see the real block.
+
+When the server's mods change, the client is sent the new description and asks for one more restart; until then
+it is shown the normal stand-ins. Blocks drawn by a renderer (GeckoLib and Citadel block entities, signs) still
+come from the server's displays, and anything that needs the mod's own client code still needs the mod.
+
+The client mod is for joining servers; do not install it together with Polymer Patcher++ itself.
+`companion.enabled` in the server config turns the whole thing off.
+
 ## Commands (operator level 2)
 
 | Command | What it does |
@@ -83,6 +105,7 @@ are handled by the generic systems above.
 | `blocks.replayModdedBlockAmbience` | `true` | Replay modded blocks' ambient particles |
 | `blocks.blockAmbienceExcludedMods` | `[]` | Mods whose block ambience is left out |
 | `blocks.vanillaSlabsWhenOutOfCarriers` | `false` | Show the nearest vanilla slab instead of a display when slab carriers run out |
+| `companion.enabled` | `true` | Offer real blocks to players with the Polymer Patcher++ Client mod |
 
 ## Known limitations
 

@@ -215,6 +215,9 @@ public class ResourcePackGenerator {
         leaveOutUnreadableText(builder);
         replaceClientOnlyItemModels(builder);
         EquipmentFallbacks.generate(builder);
+        // After the mod's assets have been copied, so custom gliders can be translated from their
+        // client-renderer-only humanoid layer into the wings layer used by vanilla Elytra rendering.
+        GliderFallbacks.generate(builder);
         bridgeModelsRegisteredAsTheGamesOwn(builder);
         repairOrphanedSignTemplates(builder);
 

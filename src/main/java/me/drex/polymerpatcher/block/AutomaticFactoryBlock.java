@@ -15,6 +15,7 @@ import eu.pb4.polymer.resourcepack.extras.api.format.blockstate.StateModelVarian
 import eu.pb4.polymer.resourcepack.extras.api.format.blockstate.StateMultiPartDefinition;
 import eu.pb4.polymer.virtualentity.api.ElementHolder;
 import me.drex.polymerpatcher.PolymerPatcher;
+import me.drex.polymerpatcher.companion.CompanionServer;
 import me.drex.polymerpatcher.dump.data.RenderRegistry;
 import me.drex.polymerpatcher.registry.RegistryPatcher;
 import me.drex.polymerpatcher.resources.ResourceHelper;
@@ -44,6 +45,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public record AutomaticFactoryBlock(
+    Block block,
     Map<BlockState, BlockState> mappedStates,
     Set<BlockState> requiresElementHolder
 ) implements FactoryBlock, PolymerTexturedBlock, BSMMParticleBlock {
@@ -269,7 +271,7 @@ public record AutomaticFactoryBlock(
         // placed state is invisible. Its inventory/particle model may still exist in the pack.
         if (originalBlock.getStateDefinition().getPossibleStates().stream()
             .allMatch(AutomaticFactoryBlock::isRendererInvisible)) {
-            return new AutomaticFactoryBlock(Map.of(), Set.of());
+            return new AutomaticFactoryBlock(originalBlock, Map.of(), Set.of());
         }
         // Some models have multiple block states that use the same state model variants
         // We don't want to waste blockstates for that, so we remember them
@@ -322,7 +324,7 @@ public record AutomaticFactoryBlock(
             }
         );
         count(id, mappedStates, requiresElementHolder);
-        return new AutomaticFactoryBlock(mappedStates, requiresElementHolder);
+        return new AutomaticFactoryBlock(originalBlock, mappedStates, requiresElementHolder);
     }
 
     private static void addSimpleMultipartVariants(
@@ -1167,7 +1169,30 @@ public record AutomaticFactoryBlock(
 
     @Override
     public boolean showCustomMiningStageMarker(BlockState state, BlockPos pos, ServerPlayer player) {
-        return usesServerTimedBreakOverlay(state);
+        // A companion client cracks its own copy of the block, as it would any block of its own
+        return usesServerTimedBreakOverlay(state) && !CompanionServer.hasBlock(player, state.getBlock());
+    }
+
+    /**
+     * Mining is timed on the server, with mining fatigue holding the client back, because a client would
+     * otherwise time it from the carrier's hardness. A companion client has the real block's hardness and
+     * the real tool tags, and times it right by itself.
+     */
+    @Override
+    public boolean handleMiningOnServer(ItemStack tool, BlockState state, BlockPos pos, ServerPlayer player) {
+        return !CompanionServer.hasBlock(player, state.getBlock());
+    }
+
+    /** A companion client moves against the real shape, so the server must too or the two fight. */
+    @Override
+    public boolean overridePlayerCollisionsWithPolymer(net.minecraft.world.level.BlockGetter level, BlockPos pos, BlockState state, ServerPlayer player) {
+        return !CompanionServer.hasBlock(player, state.getBlock());
+    }
+
+    /** Block tags naming this block, for a companion client that has a copy of it. */
+    @Override
+    public boolean canSyncRawToClient(PacketContext context) {
+        return CompanionServer.tagsReady(context, block);
     }
 
     @Override

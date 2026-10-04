@@ -141,6 +141,23 @@ public class BlockStateModel extends BlockModel {
         });
     }
 
+    /** A companion client draws the block itself; a display would draw it a second time on top. */
+    @Override
+    public boolean startWatching(net.minecraft.server.network.ServerGamePacketListenerImpl player) {
+        if (this.drawsBlock && me.drex.polymerpatcher.companion.CompanionServer.drawsItself(player.getPlayer(), safeBlockState())) {
+            return false;
+        }
+        return super.startWatching(player);
+    }
+
+    private @Nullable BlockState safeBlockState() {
+        try {
+            return this.blockState();
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
     public void notifyUpdate(HolderAttachment.UpdateType updateType) {
         super.notifyUpdate(updateType);
         if (updateType == BlockAwareAttachment.BLOCK_STATE_UPDATE) {

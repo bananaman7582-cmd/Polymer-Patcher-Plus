@@ -11,6 +11,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.Vec3;
 
@@ -31,7 +32,10 @@ final class NeverendFloatingTextModel extends BlockModel {
         label.setShadow(true);
         label.setOffset(new Vec3(0, 1.2, 0));
         addElement(label);
-        updateText();
+        // Never from the world here: this is built while its own chunk is still being made, and asking the
+        // world for a block there waits for that very chunk - the server froze for good. The first tick has
+        // the block state from the attachment
+        updateText(null);
     }
 
     @Override
@@ -42,18 +46,28 @@ final class NeverendFloatingTextModel extends BlockModel {
 
     @Override
     protected void onTick() {
-        updateText();
+        BlockState state = attachedState();
+        if (state != null) {
+            updateText(state);
+        }
         super.onTick();
     }
 
-    private void updateText() {
+    private @org.jetbrains.annotations.Nullable BlockState attachedState() {
+        try {
+            return blockState();
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    private void updateText(@org.jetbrains.annotations.Nullable BlockState state) {
         ChunkPos chunk = ChunkPos.containing(pos);
         Component next;
         if (block.equals(NeverendCompatibility.id("sonar"))) {
             ChunkPos safe = nearestSafeChunk(chunk, level.getSeed());
             String coordinates = safe == null ? "?" : safe.toString();
-            boolean powered = level.getBlockState(pos).hasProperty(BlockStateProperties.POWERED)
-                && level.getBlockState(pos).getValue(BlockStateProperties.POWERED);
+            boolean powered = state != null && state.hasProperty(BlockStateProperties.POWERED) && state.getValue(BlockStateProperties.POWERED);
             next = Component.literal(coordinates).withStyle(style -> style
                 .withColor(ChatFormatting.AQUA).withObfuscated(!powered));
         } else {

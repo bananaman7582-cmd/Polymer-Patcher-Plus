@@ -1,0 +1,33 @@
+{
+	"schemaVersion": 1,
+	"id": "polymer-patcher-client",
+	"version": "${version}",
+	"name": "Polymer Patcher++ Client",
+	"description": "Optional client companion for Polymer Patcher++ servers. After you join a server once and restart, its modded blocks and fluids are real blocks on your client: their own shapes, light, sounds, hardness and models instead of borrowed vanilla ones.",
+	"authors": [
+		"Bananaman"
+	],
+	"license": "LGPL-3.0-only",
+	"environment": "client",
+	"entrypoints": {
+		"main": [
+			"me.drex.polymerpatcher.companion.client.CompanionMod"
+		],
+		"client": [
+			"me.drex.polymerpatcher.companion.client.CompanionClient"
+		]
+	},
+	"mixins": [
+		"polymer-patcher-client.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.18.4",
+		"minecraft": "~26.2",
+		"java": ">=21",
+		"fabric-api": "*",
+		"polymer-core": ">=0.17.5"
+	},
+	"breaks": {
+		"polymer-patcher": "*"
+	}
+}

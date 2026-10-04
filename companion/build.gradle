@@ -1,0 +1,68 @@
+plugins {
+	id "fabric-loom"
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	maven { url 'https://maven.nucleoid.xyz/releases' }
+}
+
+// The same empty mappings the root project explains: 26.2 is unobfuscated, so there is nothing to
+// rename, but loom will not configure without being handed something.
+def identityMappings = layout.buildDirectory.file("unobfuscated-mappings.tiny").get().asFile
+identityMappings.parentFile.mkdirs()
+identityMappings.text = "tiny\t2\t0\tofficial\tintermediary\tnamed\n"
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings loom.layered {
+		mappings(identityMappings)
+	}
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+	// Required at runtime too (players already have it as polymer-bundled), but never shipped in this jar
+	modCompileOnly "eu.pb4:polymer-core:${project.polymer_version}"
+	modCompileOnly "eu.pb4:polymer-common:${project.polymer_version}"
+	modCompileOnly "eu.pb4:polymer-networking:${project.polymer_version}"
+	// Only for the development client the self-test runs in
+	modLocalRuntime "eu.pb4:polymer-core:${project.polymer_version}"
+	modLocalRuntime "eu.pb4:polymer-common:${project.polymer_version}"
+	modLocalRuntime "eu.pb4:polymer-networking:${project.polymer_version}"
+	modLocalRuntime "eu.pb4:polymer-reg-sync-manipulator:${project.polymer_version}"
+}
+
+// The manifest and handshake are shared word for word with the server mod
+sourceSets.main.java.srcDir "../companion-shared/src/main/java"
+
+processResources {
+	inputs.property "version", project.version
+	filesMatching("fabric.mod.json") {
+		expand "version": project.version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+}
+
+loom {
+	noIntermediateMappings()
+
+	runs {
+		client {
+			programArgs "--username", (System.getenv("PP_USERNAME") ?: "CompanionTest"), "--quickPlayMultiplayer", "localhost:25599"
+			runDir (System.getenv("PP_RUNDIR") ?: "run")
+			// 26.2 has no intermediary, so the game and the mods are all in the one set of names
+			property "fabric.runtimeMappingNamespace", "named"
+			if (System.getenv("PP_SELFTEST") != null) {
+				property "polymerpatcher.companion.selftest", System.getenv("PP_SELFTEST")
+			}
+		}
+	}
+}

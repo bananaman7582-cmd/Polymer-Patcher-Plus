@@ -85,6 +85,10 @@ final class AutomaticMenuUiAssets {
             result.add("textures/gui/inventory/" + base + ".png");
             result.add("textures/gui/" + base + "_gui.png");
             result.add("textures/gui/container/" + base + "_gui.png");
+            // Menu registries commonly omit the block-name suffix while their screen texture keeps it
+            // (for example illagerinvasion:imbuing -> imbuing_table.png).
+            result.add("textures/gui/" + base + "_table.png");
+            result.add("textures/gui/container/" + base + "_table.png");
         }
         return List.copyOf(result);
     }

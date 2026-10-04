@@ -159,6 +159,63 @@ public class ResourceHelper {
         return declared.contains(id.getPath()) && !isVanillaSoundName(id.getPath());
     }
 
+    /** The sound events the game creates in {@code SoundEvents}, read once. */
+    private static volatile java.util.@Nullable Set<Identifier> soundEventsFields;
+
+    /**
+     * Whether a sound event under {@code minecraft} is really the game's, so a vanilla client has it at
+     * the same number.
+     * <p>
+     * Being declared by a mod is not the only way to be a mod's. FallDrop Backport also registers
+     * {@code minecraft:intentionally_emptys}, a silent sound it never puts in any sounds.json - so
+     * nothing declared it, it passed as the game's own, and its number went out unchanged. That number
+     * is some unrelated vanilla sound on a vanilla client, and the shelf mushroom uses it as its hit
+     * sound, which is what plays while one is being mined.
+     * <p>
+     * So the game's own is asked positively: the game's sound list names it, or the game's own
+     * {@code SoundEvents} creates it and no mod claims it.
+     */
+    public static boolean isGamesOwnSoundEvent(Identifier id) {
+        if (isVanillaSoundName(id.getPath())) {
+            return true;
+        }
+        java.util.Set<Identifier> created = soundEventsFields;
+        if (created == null) {
+            created = readSoundEventsFields();
+            soundEventsFields = created;
+        }
+        return created.contains(id) && !isModDeclaredSoundEvent(id);
+    }
+
+    private static java.util.Set<Identifier> readSoundEventsFields() {
+        java.util.Set<Identifier> found = new java.util.HashSet<>();
+        for (var field : net.minecraft.sounds.SoundEvents.class.getDeclaredFields()) {
+            if (!java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+                continue;
+            }
+            try {
+                field.setAccessible(true);
+                collectSoundEvents(field.get(null), found);
+            } catch (Throwable ignored) {
+                // A field that cannot be read is one sound fewer counted as the game's own
+            }
+        }
+        return java.util.Set.copyOf(found);
+    }
+
+    private static void collectSoundEvents(@Nullable Object value, java.util.Set<Identifier> found) {
+        if (value instanceof net.minecraft.sounds.SoundEvent event) {
+            found.add(event.location());
+        } else if (value instanceof net.minecraft.core.Holder<?> holder && holder.isBound()
+            && holder.value() instanceof net.minecraft.sounds.SoundEvent event) {
+            found.add(event.location());
+        } else if (value instanceof Iterable<?> values) {
+            for (Object each : values) {
+                collectSoundEvents(each, found);
+            }
+        }
+    }
+
     /** Every sound name the vanilla game itself defines, as Polymer records them. */
     private static volatile java.util.@Nullable Set<String> vanillaSoundNames;
 

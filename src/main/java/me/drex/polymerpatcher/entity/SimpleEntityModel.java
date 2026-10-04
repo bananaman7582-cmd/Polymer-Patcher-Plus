@@ -56,6 +56,7 @@ public class SimpleEntityModel<Entity extends net.minecraft.world.entity.Entity,
 
     /** Carries this mob's stride between ticks, for the renderers that leave it at nothing. */
     protected final ServerRenderStates.Walk walk = new ServerRenderStates.Walk();
+    protected final ServerRenderStates.Turn turn = new ServerRenderStates.Turn();
 
     private boolean noTick = true;
 
@@ -181,6 +182,7 @@ public class SimpleEntityModel<Entity extends net.minecraft.world.entity.Entity,
         // Observe movement on every server tick, even when distant poses are downsampled. Measuring
         // only between rendered poses made a walking mob's stride slow down as it moved farther away.
         walk.observe(entity);
+        turn.observe(entity);
         if (this.entity instanceof LivingEntity livingEntity) {
             this.rideAttachment.setMaxHealth(livingEntity.getMaxHealth());
             this.rideAttachment.getSyncedData().set(LivingEntityAccessor.getDATA_HEALTH_ID(), livingEntity.getHealth());
@@ -315,6 +317,7 @@ public class SimpleEntityModel<Entity extends net.minecraft.world.entity.Entity,
         }
         ServerRenderStates.applyRotations(entity, renderState);
         walk.apply(renderState);
+        turn.apply(renderState);
         if (renderer instanceof LivingEntityRenderer livingEntityRenderer) {
             livingEntityRenderer.getModel().setupAnim(renderState);
         } else if (renderer instanceof AbstractBoatRendererAccessor abstractBoatRenderer) {

@@ -98,7 +98,9 @@ public final class ModdedFluidBlock implements FactoryBlock, PolymerTexturedBloc
     public boolean needsWaterPhysics(net.minecraft.server.level.ServerPlayer player) {
         return ConfigManager.config().blocks.moddedFluidsAsWater
             && !ConfigManager.config().blocks.fluidsKeptAsThemselves.contains(fluid.toString())
-            && !me.drex.polymerpatcher.util.NativeClients.has(player, fluid.getNamespace());
+            && !me.drex.polymerpatcher.util.NativeClients.has(player, fluid.getNamespace())
+            // A client with its own copy of this fluid is given water movement in it by the companion
+            && !me.drex.polymerpatcher.companion.CompanionServer.hasBlock(player, blockOf());
     }
 
     /** Water at the same depth, used only locally to give an unmodded client swimming physics. */
@@ -166,6 +168,18 @@ public final class ModdedFluidBlock implements FactoryBlock, PolymerTexturedBloc
         // visibly mix blue into a translucent custom liquid. The carrier path above is expected for
         // every level; this exists only as a resource-exhaustion fallback.
         return Blocks.AIR.defaultBlockState();
+    }
+
+    /** Block tags naming this fluid's block, for a companion client that has a copy of it. */
+    @Override
+    public boolean canSyncRawToClient(PacketContext context) {
+        return me.drex.polymerpatcher.companion.CompanionServer.tagsReady(context, blockOf());
+    }
+
+    @Override
+    public boolean overridePlayerCollisionsWithPolymer(net.minecraft.world.level.BlockGetter level, BlockPos pos, BlockState state,
+                                                       net.minecraft.server.level.ServerPlayer player) {
+        return !me.drex.polymerpatcher.companion.CompanionServer.hasBlock(player, state.getBlock());
     }
 
     @Override
@@ -288,6 +302,12 @@ public final class ModdedFluidBlock implements FactoryBlock, PolymerTexturedBloc
     private final class EdgeModel extends BlockModel implements EdgeAware {
         private final Edges edges;
 
+        @Override
+        public boolean startWatching(net.minecraft.server.network.ServerGamePacketListenerImpl player) {
+            // The companion draws this fluid as a real one, walls and all
+            return !me.drex.polymerpatcher.companion.CompanionServer.hasBlock(player.getPlayer(), blockOf()) && super.startWatching(player);
+        }
+
         private EdgeModel(ServerLevel world, BlockPos pos, BlockState state) {
             this.edges = new Edges(world, pos.immutable(), this);
             edges.refresh(state);
@@ -317,6 +337,11 @@ public final class ModdedFluidBlock implements FactoryBlock, PolymerTexturedBloc
 
     private final class Model extends BlockModel implements EdgeAware {
         private final ItemDisplayElement element = ItemDisplayElementUtil.createSimple();
+
+        @Override
+        public boolean startWatching(net.minecraft.server.network.ServerGamePacketListenerImpl player) {
+            return !me.drex.polymerpatcher.companion.CompanionServer.hasBlock(player.getPlayer(), blockOf()) && super.startWatching(player);
+        }
         private final @Nullable Edges edges;
 
         /** What is being shown, so that a recheck that changes nothing sends nothing. */

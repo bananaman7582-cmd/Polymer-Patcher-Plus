@@ -70,7 +70,8 @@ public final class AlexsCavesArmorModels {
             }
 
             Equippable equippable = item.components().get(DataComponents.EQUIPPABLE);
-            if (equippable == null || equippable.assetId().isEmpty()) {
+            if (equippable == null || equippable.assetId().isEmpty()
+                || item.components().has(DataComponents.GLIDER)) {
                 continue;
             }
 

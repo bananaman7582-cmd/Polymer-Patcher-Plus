@@ -86,7 +86,7 @@ public final class ConventionalArmorModels {
                 }
 
                 Equippable equippable = item.components().get(DataComponents.EQUIPPABLE);
-                if (equippable == null) {
+                if (equippable == null || item.components().has(DataComponents.GLIDER)) {
                     continue;
                 }
 

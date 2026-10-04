@@ -48,3 +48,7 @@ eu/
 /polymer-core.mixins.json
 # a separate mod, not part of this build
 the-sift-fantasy-compat/
+
+# the companion client's development game folders (worlds, downloaded server packs, screenshots)
+/companion/run*/
+/client-dump/run*/

@@ -67,7 +67,18 @@ public class RegistryPatcher {
         patchRegistry(BuiltInRegistries.BLOCK_ENTITY_TYPE,
             (identifier, blockEntityType) -> PolymerBlockUtils.registerBlockEntity(blockEntityType));
         patchRegistry(BuiltInRegistries.FLUID, (identifier, fluid) -> {
-            PolymerSyncedObject.setPlainSyncedObject(BuiltInRegistries.FLUID, fluid, (object, context) -> Fluids.LAVA);
+            PolymerSyncedObject.setPlainSyncedObject(BuiltInRegistries.FLUID, fluid, new PolymerSyncedObject<>() {
+                @Override
+                public net.minecraft.world.level.material.Fluid getPolymerReplacement(net.minecraft.world.level.material.Fluid object, PacketContext context) {
+                    return Fluids.LAVA;
+                }
+
+                @Override
+                public boolean canSyncRawToClient(PacketContext context) {
+                    // A companion client registered its own copy of this fluid, under this name
+                    return me.drex.polymerpatcher.companion.CompanionServer.tagsReady(context, fluid);
+                }
+            });
             RegistrySyncUtils.setServerEntry(BuiltInRegistries.FLUID, fluid);
         });
         patchRegistry(BuiltInRegistries.GAME_EVENT, (identifier, gameEvent) -> {
@@ -367,7 +378,9 @@ public class RegistryPatcher {
         List<SoundEvent> all = new ArrayList<>();
 
         for (Holder.Reference<SoundEvent> reference : BuiltInRegistries.SOUND_EVENT.listElements().toList()) {
-            if (!isVanillaId(reference.key().identifier())) {
+            // Only sounds the game really has: a mod's sound under the game's name is no stand-in, as a
+            // vanilla client has nothing at its number either
+            if (!isVanillaId(reference.key().identifier()) || !ResourceHelper.isGamesOwnSoundEvent(reference.key().identifier())) {
                 continue;
             }
             SoundEvent value = reference.value();
@@ -633,7 +646,7 @@ public class RegistryPatcher {
         } else if (registry.key() == BuiltInRegistries.ENTITY_TYPE.key()) {
             theGamesOwn = isVanillaEntityType(id);
         } else if (registry.key() == BuiltInRegistries.SOUND_EVENT.key()) {
-            theGamesOwn = !ResourceHelper.isModDeclaredSoundEvent(id);
+            theGamesOwn = ResourceHelper.isGamesOwnSoundEvent(id);
         } else {
             theGamesOwn = true;
         }

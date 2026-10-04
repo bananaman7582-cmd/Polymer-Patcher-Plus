@@ -8,6 +8,7 @@ import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
@@ -191,6 +192,13 @@ public final class ArmorModels {
                             List<String> rejected, @Nullable HumanoidModel<HumanoidRenderState> prebuilt) {
         Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
         if (itemId == null) {
+            return;
+        }
+
+        // A glider is rendered by the client's native Elytra layer. Capturing its mod renderer as
+        // display-based armour draws a second pair of wings which updates at server tick speed and can
+        // cross the camera. GliderFallbacks supplies the vanilla wings asset instead.
+        if (item.components().has(DataComponents.GLIDER)) {
             return;
         }
 

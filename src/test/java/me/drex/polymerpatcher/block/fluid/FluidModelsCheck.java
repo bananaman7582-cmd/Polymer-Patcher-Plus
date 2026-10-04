@@ -42,7 +42,30 @@ public final class FluidModelsCheck {
                 }
             }
         }
+        checkEnclosedEyeCell(skin);
         System.out.println("Verified all 16 world and in-fluid models have valid faces, consistent UVs, connected columns, and source skirts without upper rims");
+    }
+
+    /** The camera cell must have an inward-facing twin for every exposed face, or it becomes a window. */
+    private static void checkEnclosedEyeCell(ModdedFluids.Skin skin) {
+        String json = FluidModels.occupiedAsset(skin, 8 / 9.0F * 16.0F, false, false,
+            FluidModels.ALL_OPEN).toJson();
+        JsonArray elements = JsonParser.parseString(json).getAsJsonObject().getAsJsonArray("elements");
+        java.util.Map<String, Integer> faces = new java.util.HashMap<>();
+        for (var value : elements) {
+            JsonObject element = value.getAsJsonObject();
+            for (var face : element.getAsJsonObject("faces").entrySet()) {
+                faces.merge(face.getKey(), 1, Integer::sum);
+            }
+        }
+        for (String side : new String[]{"north", "south", "east", "west"}) {
+            if (faces.getOrDefault(side, 0) < 2) {
+                throw new AssertionError("The occupied camera cell has no inward-facing " + side + " wall");
+            }
+        }
+        if (faces.getOrDefault("up", 0) < 2 || faces.getOrDefault("down", 0) < 1) {
+            throw new AssertionError("The occupied camera cell is vertically open: " + faces);
+        }
     }
 
     /**

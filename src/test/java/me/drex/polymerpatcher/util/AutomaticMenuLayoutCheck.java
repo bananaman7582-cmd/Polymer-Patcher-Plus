@@ -46,8 +46,16 @@ public final class AutomaticMenuLayoutCheck {
             "plain slot-only containers were rejected");
         require(!AutomaticMenuLayout.canRepresentControlState(1, false),
             "a stateful machine was accepted as a generic container");
+        require(AutomaticMenuLayout.canSafelyBridgeControlState(1, false),
+            "a server-only visual state was rejected by the redirected-menu bridge");
         require(!AutomaticMenuLayout.canRepresentControlState(0, true),
             "a button-driven machine was accepted as a generic container");
+        require(!AutomaticMenuLayout.canSafelyBridgeControlState(0, true),
+            "a button-driven machine was accepted by the redirected-menu bridge");
+        require(AutomaticMenuUiAssets.candidates("imbuing")
+                .contains("textures/gui/container/imbuing_table.png"),
+            "menu-to-table texture source discovery regressed");
+
         System.out.println("Automatic menu layout checks passed");
     }
 

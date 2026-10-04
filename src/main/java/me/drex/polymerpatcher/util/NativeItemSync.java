@@ -404,7 +404,43 @@ public final class NativeItemSync {
         Component reason = Component.literal("Your mods don't match this server.\n\n"
             + (theirs.size() == 1 ? "Install this version to join:\n" : "Install these versions to join:\n")
             + String.join("\n", theirs.values()));
-        server.execute(() -> handler.disconnect(reason));
+        REFUSALS.put(handler, new Refusal(reason, REFUSAL_DELAY_TICKS));
+    }
+
+    /**
+     * How long a refused player is let finish joining before being sent away.
+     * <p>
+     * The refusal is decided the moment the client names its channels, which is in the middle of joining -
+     * before other mods have finished with the player. Disconnecting there let the disconnect overtake
+     * AuthCore's own join: it handled the player leaving first, then the join, and so recorded a dead
+     * connection as logged in. From then on it turned the player away as "already logged in" on every
+     * attempt until the server restarted - Sir_ChickenNug was locked out that way after one refusal.
+     * Three seconds lets every join finish, so the disconnect is an ordinary one that everything sees.
+     */
+    private static final int REFUSAL_DELAY_TICKS = 60;
+
+    private record Refusal(Component reason, int ticksLeft) {
+    }
+
+    private static final Map<ServerGamePacketListenerImpl, Refusal> REFUSALS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    static {
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(server -> {
+            var refusals = REFUSALS.entrySet().iterator();
+            while (refusals.hasNext()) {
+                var entry = refusals.next();
+                ServerGamePacketListenerImpl handler = entry.getKey();
+                Refusal refusal = entry.getValue();
+                if (!handler.isAcceptingMessages()) {
+                    refusals.remove();
+                } else if (refusal.ticksLeft() <= 0) {
+                    refusals.remove();
+                    handler.disconnect(refusal.reason());
+                } else {
+                    entry.setValue(new Refusal(refusal.reason(), refusal.ticksLeft() - 1));
+                }
+            }
+        });
     }
 
     private static Set<String> hiddenNamespaces() {

@@ -7,4 +7,5 @@ public class Config {
     public SoundConfig sounds = new SoundConfig();
     public EffectConfig effects = new EffectConfig();
     public LightConfig light = new LightConfig();
+    public CompanionConfig companion = new CompanionConfig();
 }

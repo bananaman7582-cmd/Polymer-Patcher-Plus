@@ -8,8 +8,7 @@ import eu.pb4.polymer.resourcepack.extras.api.format.item.model.BasicItemModel;
 import eu.pb4.polymer.resourcepack.extras.api.format.item.tint.MapColorTintSource;
 import me.drex.polymerpatcher.block.color.ColorMapHelper;
 import me.drex.polymerpatcher.command.PolymerPatcherCommand;
-import me.drex.polymerpatcher.compat.enderscape.EnderscapeCompatibility;
-import me.drex.polymerpatcher.compat.alexsmobs.AlexsMobsCompatibility;
+import me.drex.polymerpatcher.compat.CompatibilityModules;
 import me.drex.polymerpatcher.config.ConfigManager;
 import me.drex.polymerpatcher.dump.data.RenderRegistry;
 import me.drex.polymerpatcher.dump.data.RenderRegistryStorage;
@@ -54,27 +53,15 @@ public class PolymerPatcher implements DedicatedServerModInitializer {
         // matching recipes with the visible carrier as their input; it is opt-in, so turn it on.
         eu.pb4.polymer.core.api.item.PolymerItemUtils.enableStonecutterFix();
         me.drex.polymerpatcher.util.ModdedMenus.init();
-        me.drex.polymerpatcher.compat.alexscaves.NuclearFurnaceCompat.init();
-        me.drex.polymerpatcher.compat.alexscaves.AlexsCavesItemTints.init();
-        me.drex.polymerpatcher.compat.alexscaves.AlexsCavesBiomeLight.init();
-        AlexsMobsCompatibility.init();
-        EnderscapeCompatibility.init();
-        me.drex.polymerpatcher.compat.neverend.NeverendCompatibility.init();
+        CompatibilityModules.initBeforeResources();
         // Registered before the server starts, which is when auto-host looks its configured type up
         ResourcePackDataProvider.register(id("per_client"), PerClientPackProvider::new);
+        // Before the mods' own language files, so a name worked out here never covers a real one
+        PolymerResourcePackUtils.RESOURCE_PACK_CREATION_EVENT.register(me.drex.polymerpatcher.resources.MissingTranslations::generate);
         PolymerResourcePackUtils.RESOURCE_PACK_CREATION_EVENT.register(ResourceHelper::init);
-        me.drex.polymerpatcher.compat.borrowedecho.BorrowedEchoPlayerSkins.init();
+        me.drex.polymerpatcher.companion.CompanionServer.init();
         me.drex.polymerpatcher.effect.ModdedEffectNotices.init();
-        me.drex.polymerpatcher.compat.alexscaves.NuclearCloud.init();
-        me.drex.polymerpatcher.compat.alexscaves.NucleeperSiren.init();
-        me.drex.polymerpatcher.compat.alexscaves.ResistorShieldEffects.init();
-        me.drex.polymerpatcher.compat.alexscaves.MagneticCrackEffects.init();
-        me.drex.polymerpatcher.compat.alexscaves.MagneticPull.init();
-        me.drex.polymerpatcher.compat.alexscaves.SpiritGrip.init();
-        me.drex.polymerpatcher.compat.alexscaves.ExtinctionSpearEffects.init();
-        me.drex.polymerpatcher.compat.alexscaves.RaygunBeam.init();
-        me.drex.polymerpatcher.compat.alexscaves.CaveMaps.init();
-        me.drex.polymerpatcher.compat.sculkhorde.SculkHordeClientEffects.init();
+        CompatibilityModules.initAfterResources();
         me.drex.polymerpatcher.block.ModdedBlockAmbience.init();
         me.drex.polymerpatcher.block.BlockUsage.init();
         me.drex.polymerpatcher.util.LogQuieter.install();
@@ -103,7 +90,7 @@ public class PolymerPatcher implements DedicatedServerModInitializer {
                 me.drex.polymerpatcher.util.ModdedMenus.forget(handler.getPlayer());
                 me.drex.polymerpatcher.util.NativeItemSync.forget(handler.getPlayer());
                 me.drex.polymerpatcher.block.fluid.ModdedFluidPhysics.forget(handler.getPlayer());
-                me.drex.polymerpatcher.compat.neverend.NeverendClientEffects.forget(handler.getPlayer());
+                CompatibilityModules.forget(handler.getPlayer());
 
                 me.drex.polymerpatcher.effect.ModdedEffectNotices.forget(handler.getPlayer());
             });
@@ -157,9 +144,7 @@ public class PolymerPatcher implements DedicatedServerModInitializer {
                 // came to be drawn as nothing
                 me.drex.polymerpatcher.entity.citadel.CitadelModel.warmModelClasses();
                 me.drex.polymerpatcher.entity.render.RenderCaptureRules.init();
-                me.drex.polymerpatcher.compat.alexscaves.AlexsCavesRenderRules.init();
-                AlexsMobsCompatibility.setupRendering();
-                me.drex.polymerpatcher.compat.neverend.NeverendCompatibility.setupRendering(renderRegistry);
+                CompatibilityModules.setupRendering(renderRegistry);
                 // Before models are registered: each resolved player skin needs the same generated
                 // Borrowed Echo part models as the default skins already in the render dump.
                 me.drex.polymerpatcher.compat.borrowedecho.BorrowedEchoPlayerSkins.prepare(server);

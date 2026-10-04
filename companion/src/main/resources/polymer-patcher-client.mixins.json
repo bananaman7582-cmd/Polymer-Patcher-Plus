@@ -1,0 +1,16 @@
+{
+	"required": true,
+	"minVersion": "0.8",
+	"package": "me.drex.polymerpatcher.companion.client.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"ClientCommonPacketListenerImplAccessor",
+		"FluidStateMixin",
+		"MappedRegistryAccessor",
+		"ModelManagerMixin",
+		"PolymerClientProtocolHandlerMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}
