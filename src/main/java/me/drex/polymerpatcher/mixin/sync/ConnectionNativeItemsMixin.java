@@ -1,12 +1,15 @@
 package me.drex.polymerpatcher.mixin.sync;
 
-import me.drex.polymerpatcher.util.ComponentNumbering;
+import me.drex.polymerpatcher.util.ClientNumbering;
 import me.drex.polymerpatcher.util.NativeItemConnection;
 import net.minecraft.network.Connection;
+import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Unique;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -51,16 +54,30 @@ public abstract class ConnectionNativeItemsMixin implements NativeItemConnection
         this.polymerPatcher$sameVersionMods = mods;
     }
 
+    /** Replaced whole rather than changed, because it is read on the network thread for every packet. */
     @Unique
-    private volatile @Nullable ComponentNumbering polymerPatcher$componentNumbering;
+    private volatile @Nullable Map<Identifier, ClientNumbering> polymerPatcher$numberings;
 
     @Override
-    public @Nullable ComponentNumbering polymerPatcher$componentNumbering() {
-        return this.polymerPatcher$componentNumbering;
+    public @Nullable ClientNumbering polymerPatcher$numbering(Identifier registry) {
+        Map<Identifier, ClientNumbering> numberings = this.polymerPatcher$numberings;
+        return numberings == null ? null : numberings.get(registry);
     }
 
     @Override
-    public void polymerPatcher$setComponentNumbering(@Nullable ComponentNumbering numbering) {
-        this.polymerPatcher$componentNumbering = numbering;
+    public synchronized void polymerPatcher$setNumbering(Identifier registry, @Nullable ClientNumbering numbering) {
+        Map<Identifier, ClientNumbering> numberings = this.polymerPatcher$numberings;
+        Map<Identifier, ClientNumbering> next = numberings == null ? new HashMap<>() : new HashMap<>(numberings);
+        if (numbering == null) {
+            next.remove(registry);
+        } else {
+            next.put(registry, numbering);
+        }
+        this.polymerPatcher$numberings = Map.copyOf(next);
+    }
+
+    @Override
+    public void polymerPatcher$clearNumberings() {
+        this.polymerPatcher$numberings = null;
     }
 }

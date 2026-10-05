@@ -104,6 +104,7 @@ public final class NativeItemSync {
     /** Namespaces with content Polymer hides from clients: the mods whose items exist only on this server. */
     private static volatile @Nullable Set<String> hiddenNamespaces;
 
+    /** {@code namespaces} is empty when only the item data types were renumbered and the items were not. */
     private record PendingCheck(String name, Set<String> namespaces) {
     }
 
@@ -121,17 +122,22 @@ public final class NativeItemSync {
             }
             NOT_MATCHING.remove(id);
             PendingCheck check = PENDING.remove(id);
-            if (check != null) {
+            if (check != null && !check.namespaces().isEmpty()) {
                 PolymerPatcher.LOGGER.warn("{} disconnected while their client was renumbering its items to match this server's {}. "
                         + "Their client log says why; this server runs {}.",
                     check.name(), check.namespaces(), versions(check.namespaces()));
+            } else if (check != null) {
+                PolymerPatcher.LOGGER.warn("{} disconnected while their client was renumbering its items and item data types to match this server. "
+                        + "Their client log says why; set entities.nativeComponents to false if this keeps happening.", check.name());
             }
         });
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             PendingCheck check = PENDING.remove(handler.getPlayer().getUUID());
-            if (check != null) {
+            if (check != null && !check.namespaces().isEmpty()) {
                 PolymerPatcher.LOGGER.info("{} took this server's item numbering and is handed the real items of {}", check.name(), check.namespaces());
+            } else if (check != null) {
+                PolymerPatcher.LOGGER.info("{} took this server's numbering; items they send back from creative mode are read as what they are", check.name());
             }
             sayWhatIsOutOfDate(handler);
             refuseIfDifferent(handler, server, ServerPlayNetworking.getSendable(handler));
@@ -217,84 +223,103 @@ public final class NativeItemSync {
                 return null;
             }
 
-            if (sameNamespaces.isEmpty() || !ConfigManager.config().entities.nativeItems) {
-                return null;
-            }
-
-            // Every item goes in, in the server's own order, exactly as Fabric would write it - vanilla ones
-            // included. An item left out of the map is one the client assumes is its own and renumbers, and a
-            // vanilla item renumbered is every vanilla item wrong. The only ones left out are Polymer's, and of
-            // those only the ones belonging to mods this client does not have at this server's version
-            Set<String> included = new TreeSet<>();
-            Object2IntLinkedOpenHashMap<Identifier> items = new Object2IntLinkedOpenHashMap<>();
-            int highestSent = -1;
-            int firstHole = Integer.MAX_VALUE;
-            String holeBelongsTo = null;
-
-            for (Item item : BuiltInRegistries.ITEM) {
-                Identifier key = BuiltInRegistries.ITEM.getKey(item);
-                if (key == null) {
-                    continue;
-                }
-                int number = BuiltInRegistries.ITEM.getId(item);
-                if (RegistrySyncUtils.isServerEntry(BuiltInRegistries.ITEM, item)) {
-                    // A mod registering under the game's own name is still left as a stand-in: the name says
-                    // nothing about which mod it is, so there is no pack to match it against
-                    if (RegistryPatcher.isVanillaId(key) || !sameNamespaces.contains(key.getNamespace())) {
-                        if (number < firstHole) {
-                            firstHole = number;
-                            holeBelongsTo = key.getNamespace();
-                        }
-                        continue;
-                    }
-                    included.add(key.getNamespace());
-                }
-                items.put(key, number);
-                highestSent = Math.max(highestSent, number);
-            }
-
-            if (included.isEmpty() || !(connectionOf(handler) instanceof NativeItemConnection state)) {
-                return null;
-            }
-
-            // An id this server uses for something left out of the map is an id with nothing in it on the
-            // client, and since 26.2 that is fatal. The client walks its item registry by number to give
-            // each item its components, a number with nothing at it is a null it cannot give anything to,
-            // and it throws while finishing joining - before it is ever in the game, with nothing in its
-            // own log tying the crash to its mods. kingy_allay, who had four of this server's content mods
-            // and not the rest, could not get in at all.
-            //
-            // So the numbering only goes out when it arrives whole. A client missing any of the mods whose
-            // items would fill it gets the stand-ins instead, exactly as it did before any of this existed,
-            // and is told on joining which mods it is missing.
-            if (firstHole < highestSent) {
-                PolymerPatcher.LOGGER.info("{} is missing {}, whose items sit in the middle of this server's numbering; "
-                        + "they are sent the stand-ins rather than a numbering with holes in it, which a client cannot read",
-                    ownerName(handler), holeBelongsTo);
-                clearNamespaces(handler);
-                return null;
-            }
-            state.polymerPatcher$setSyncedItemNamespaces(Set.copyOf(included));
-
             Map<Identifier, Object2IntMap<Identifier>> sync = new LinkedHashMap<>();
-            sync.put(ITEM_REGISTRY, items);
-
-            // The item data types of the same mods, numbered so an item the client sends back - a creative
-            // pick above all - can be read. In this sync and nowhere else: see ComponentNumbering
-            if (ConfigManager.config().entities.nativeComponents) {
-                ComponentNumbering numbering = ComponentNumbering.forNamespaces(allSameVersion);
-                if (numbering != null) {
-                    sync.put(ComponentNumbering.REGISTRY, numbering.clientIds());
-                    state.polymerPatcher$setComponentNumbering(numbering);
-                }
+            Object2IntMap<Identifier> items = itemNumbering(handler, sameNamespaces);
+            if (items != null) {
+                sync.put(ITEM_REGISTRY, items);
             }
-            return sync;
+
+            // The mods it has at this server's version, numbered so an item the client sends back - a creative
+            // pick from its own tabs above all - is read as what it is. A client handed real items already has
+            // this server's item numbering, so only the data types are renumbered for it; a client given
+            // stand-ins still has those mods' creative tabs, so it gets both. See ClientNumbering
+            if (ConfigManager.config().entities.nativeComponents && connectionOf(handler) instanceof NativeItemConnection state) {
+                if (items == null) {
+                    renumber(state, sync, BuiltInRegistries.ITEM, allSameVersion);
+                }
+                renumber(state, sync, BuiltInRegistries.DATA_COMPONENT_TYPE, allSameVersion);
+            }
+            return sync.isEmpty() ? null : sync;
         } catch (Throwable e) {
             // Anything unexpected falls back to exactly what would have happened without this
             clearNamespaces(handler);
             PolymerPatcher.LOGGER.warn("Could not work out which mods a joining client has; they will get stand-ins", e);
             return null;
         }
+    }
+
+    private static void renumber(NativeItemConnection state, Map<Identifier, Object2IntMap<Identifier>> sync,
+                                 Registry<?> registry, Set<String> namespaces) {
+        ClientNumbering numbering = ClientNumbering.forNamespaces(registry, namespaces);
+        if (numbering != null) {
+            sync.put(numbering.registryId(), numbering.clientIds());
+            state.polymerPatcher$setNumbering(numbering.registryId(), numbering);
+        }
+    }
+
+    /**
+     * This server's item numbering for a client with these mods, or null when it should keep stand-ins.
+     */
+    private static @Nullable Object2IntMap<Identifier> itemNumbering(ServerConfigurationPacketListenerImpl handler, Set<String> sameNamespaces) {
+        if (sameNamespaces.isEmpty() || !ConfigManager.config().entities.nativeItems) {
+            return null;
+        }
+
+        // Every item goes in, in the server's own order, exactly as Fabric would write it - vanilla ones
+        // included. An item left out of the map is one the client assumes is its own and renumbers, and a
+        // vanilla item renumbered is every vanilla item wrong. The only ones left out are Polymer's, and of
+        // those only the ones belonging to mods this client does not have at this server's version
+        Set<String> included = new TreeSet<>();
+        Object2IntLinkedOpenHashMap<Identifier> items = new Object2IntLinkedOpenHashMap<>();
+        int highestSent = -1;
+        int firstHole = Integer.MAX_VALUE;
+        String holeBelongsTo = null;
+
+        for (Item item : BuiltInRegistries.ITEM) {
+            Identifier key = BuiltInRegistries.ITEM.getKey(item);
+            if (key == null) {
+                continue;
+            }
+            int number = BuiltInRegistries.ITEM.getId(item);
+            if (RegistrySyncUtils.isServerEntry(BuiltInRegistries.ITEM, item)) {
+                // A mod registering under the game's own name is still left as a stand-in: the name says
+                // nothing about which mod it is, so there is no pack to match it against
+                if (RegistryPatcher.isVanillaId(key) || !sameNamespaces.contains(key.getNamespace())) {
+                    if (number < firstHole) {
+                        firstHole = number;
+                        holeBelongsTo = key.getNamespace();
+                    }
+                    continue;
+                }
+                included.add(key.getNamespace());
+            }
+            items.put(key, number);
+            highestSent = Math.max(highestSent, number);
+        }
+
+        if (included.isEmpty() || !(connectionOf(handler) instanceof NativeItemConnection state)) {
+            return null;
+        }
+
+        // An id this server uses for something left out of the map is an id with nothing in it on the
+        // client, and since 26.2 that is fatal. The client walks its item registry by number to give
+        // each item its components, a number with nothing at it is a null it cannot give anything to,
+        // and it throws while finishing joining - before it is ever in the game, with nothing in its
+        // own log tying the crash to its mods. kingy_allay, who had four of this server's content mods
+        // and not the rest, could not get in at all.
+        //
+        // So the numbering only goes out when it arrives whole. A client missing any of the mods whose
+        // items would fill it gets the stand-ins instead, exactly as it did before any of this existed,
+        // and is told on joining which mods it is missing.
+        if (firstHole < highestSent) {
+            PolymerPatcher.LOGGER.info("{} is missing {}, whose items sit in the middle of this server's numbering; "
+                    + "they are sent the stand-ins rather than a numbering with holes in it, which a client cannot read",
+                ownerName(handler), holeBelongsTo);
+            clearNamespaces(handler);
+            return null;
+        }
+        state.polymerPatcher$setSyncedItemNamespaces(Set.copyOf(included));
+        return items;
     }
 
     /**
@@ -317,14 +342,37 @@ public final class NativeItemSync {
             return;
         }
 
-        Set<String> included = connectionOf(handler) instanceof NativeItemConnection state ? state.polymerPatcher$syncedItemNamespaces() : Set.of();
+        NativeItemConnection state = connectionOf(handler) instanceof NativeItemConnection known ? known : null;
+        Set<String> included = state != null ? state.polymerPatcher$syncedItemNamespaces() : Set.of();
         String name = ownerName(handler);
         UUID id = ownerId(handler);
         if (id != null) {
             PENDING.put(id, new PendingCheck(name, included));
         }
-        PolymerPatcher.LOGGER.info("Syncing {}'s item numbering for {} so they can be handed the real items{}", name, included,
-            sync.containsKey(ComponentNumbering.REGISTRY) ? ", with item data types renumbered to match" : "");
+        String renumbered = renumberedSummary(state);
+        if (!included.isEmpty()) {
+            PolymerPatcher.LOGGER.info("Syncing {}'s item numbering for {} so they can be handed the real items{}", name, included,
+                renumbered.isEmpty() ? "" : ", with " + renumbered);
+        } else {
+            PolymerPatcher.LOGGER.info("Syncing {}'s numbering so items they send back from creative mode are read correctly: {}",
+                name, renumbered);
+        }
+    }
+
+    private static String renumberedSummary(@Nullable NativeItemConnection state) {
+        if (state == null) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        ClientNumbering items = state.polymerPatcher$numbering(ITEM_REGISTRY);
+        if (items != null) {
+            parts.add(items.renumbered() + " of their mods' items renumbered to match");
+        }
+        ClientNumbering types = state.polymerPatcher$numbering(BuiltInRegistries.DATA_COMPONENT_TYPE.key().identifier());
+        if (types != null) {
+            parts.add(types.renumbered() + " of their mods' item data types renumbered to match");
+        }
+        return String.join(", ", parts);
     }
 
     /**
@@ -562,7 +610,7 @@ public final class NativeItemSync {
         try {
             if (connectionOf(handler) instanceof NativeItemConnection state) {
                 state.polymerPatcher$setSyncedItemNamespaces(Set.of());
-                state.polymerPatcher$setComponentNumbering(null);
+                state.polymerPatcher$clearNumberings();
             }
         } catch (Throwable ignored) {
             // Nothing was set, then

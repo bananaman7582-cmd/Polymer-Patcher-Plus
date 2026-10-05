@@ -404,13 +404,16 @@ public record AutomaticFactoryBlock(
 
     private static void count(Identifier id, Map<BlockState, BlockState> mappedStates, Set<BlockState> requiresElementHolder) {
         for (Map.Entry<BlockState, BlockState> entry : mappedStates.entrySet()) {
-            if (entry.getValue() == null) {
+            // A state with no carrier but a display is a barrier with the block drawn over it, which is how
+            // every display-drawn full block is shown anyway. Counting those as having no stand-in named
+            // dozens of perfectly drawn stairs in a warning about blocks a client cannot see
+            if (requiresElementHolder.contains(entry.getKey())) {
+                ON_A_DISPLAY.incrementAndGet();
+            } else if (entry.getValue() == null) {
                 UNMAPPED.incrementAndGet();
                 synchronized (UNMAPPED_BLOCKS) {
                     UNMAPPED_BLOCKS.add(id);
                 }
-            } else if (requiresElementHolder.contains(entry.getKey())) {
-                ON_A_DISPLAY.incrementAndGet();
             } else {
                 ON_A_CARRIER.incrementAndGet();
             }
@@ -442,7 +445,7 @@ public record AutomaticFactoryBlock(
 
         if (unmapped > 0) {
             synchronized (UNMAPPED_BLOCKS) {
-                PolymerPatcher.LOGGER.warn("These blocks have states a vanilla client is shown as a barrier: {}", UNMAPPED_BLOCKS);
+                PolymerPatcher.LOGGER.warn("These blocks have states a vanilla client is shown as a barrier with nothing drawn over it: {}", UNMAPPED_BLOCKS);
             }
         }
 

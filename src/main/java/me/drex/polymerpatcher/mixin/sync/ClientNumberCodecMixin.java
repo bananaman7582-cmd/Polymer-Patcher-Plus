@@ -1,6 +1,6 @@
 package me.drex.polymerpatcher.mixin.sync;
 
-import me.drex.polymerpatcher.util.ComponentNumbering;
+import me.drex.polymerpatcher.util.ClientNumbering;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.ResourceKey;
@@ -12,13 +12,14 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Reads an item data type a renumbered client sent as the type it meant. See {@link ComponentNumbering}.
+ * Reads an item or item data type a renumbered client sent as the one it meant. See {@link ClientNumbering}.
  * <p>
- * The target is the codec behind {@code ByteBufCodecs.registry}, which every data type number goes through -
- * the one Polymer itself hooks to write registry numbers. Only the data type registry is touched.
+ * The target is the codec behind {@code ByteBufCodecs.registry} and {@code holderRegistry}, which every item
+ * and data type number goes through - the one Polymer itself hooks to write registry numbers. Only those two
+ * registries are touched.
  */
 @Mixin(targets = "net/minecraft/network/codec/ByteBufCodecs$29")
-public abstract class ComponentTypeCodecMixin {
+public abstract class ClientNumberCodecMixin {
     @SuppressWarnings({"rawtypes", "ShadowModifiers"})
     @Shadow
     @Final
@@ -26,12 +27,13 @@ public abstract class ComponentTypeCodecMixin {
 
     @Inject(method = "decode(Lnet/minecraft/network/RegistryFriendlyByteBuf;)Ljava/lang/Object;", at = @At("RETURN"),
         cancellable = true, require = 0)
-    private void polymerPatcher$readClientComponentNumber(RegistryFriendlyByteBuf buf, CallbackInfoReturnable<Object> cir) {
-        if (!Registries.DATA_COMPONENT_TYPE.equals(this.val$registryKey)) {
+    private void polymerPatcher$readClientNumber(RegistryFriendlyByteBuf buf, CallbackInfoReturnable<Object> cir) {
+        ResourceKey<?> registry = this.val$registryKey;
+        if (!Registries.DATA_COMPONENT_TYPE.equals(registry) && !Registries.ITEM.equals(registry)) {
             return;
         }
         Object decoded = cir.getReturnValue();
-        Object meant = ComponentNumbering.fromClient(decoded);
+        Object meant = ClientNumbering.fromClient(registry, decoded);
         if (meant != decoded) {
             cir.setReturnValue(meant);
         }

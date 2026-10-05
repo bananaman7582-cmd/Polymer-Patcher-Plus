@@ -1,5 +1,6 @@
 package me.drex.polymerpatcher.util;
 
+import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Set;
@@ -20,8 +21,11 @@ public interface NativeItemConnection {
 
     void polymerPatcher$setSameVersionMods(Set<String> mods);
 
-    /** The data type numbering this connection's client was told to use, or null where it keeps its own. */
-    @Nullable ComponentNumbering polymerPatcher$componentNumbering();
+    /** The numbering of this registry the connection's client was told to use, or null where it keeps its own. */
+    @Nullable ClientNumbering polymerPatcher$numbering(Identifier registry);
 
-    void polymerPatcher$setComponentNumbering(@Nullable ComponentNumbering numbering);
+    void polymerPatcher$setNumbering(Identifier registry, @Nullable ClientNumbering numbering);
+
+    /** Forgets every numbering, for a client that will be sent none after all. */
+    void polymerPatcher$clearNumberings();
 }
