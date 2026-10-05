@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "package": "me.drex.polymerpatcher.mixin.voxy",
+  "plugin": "me.drex.polymerpatcher.compat.voxy.VoxyMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "minVersion": "0.8",
+  "injectors": {
+    "defaultRequire": 0
+  },
+  "mixins": [],
+  "client": []
+}

@@ -138,4 +138,12 @@ public class BlockConfig {
      * each player's loaded chunks once a second.
      */
     public boolean repairChunkSync = true;
+
+    /**
+     * Whether distant terrain sent to Voxy players - by Voxy World Gen V2 or Voxy Server Side - shows modded
+     * blocks as the carriers players see up close, rather than as the wrong vanilla block or as stone. Voxy
+     * Server Side rebuilds the terrain it keeps on disk once after this changes. See
+     * {@link me.drex.polymerpatcher.util.DistantTerrain}.
+     */
+    public boolean distantTerrainCarriers = true;
 }

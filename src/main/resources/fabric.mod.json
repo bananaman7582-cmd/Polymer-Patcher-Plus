@@ -53,6 +53,10 @@
 		{
 			"config": "polymer-patcher-neverend.mixins.json",
 			"environment": "server"
+		},
+		{
+			"config": "polymer-patcher-voxy.mixins.json",
+			"environment": "server"
 		}
 	],
 	"accessWidener": "polymer-patcher.classtweaker",

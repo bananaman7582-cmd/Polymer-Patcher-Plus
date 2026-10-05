@@ -107,6 +107,7 @@ The client mod is for joining servers; do not install it together with Polymer P
 | `blocks.vanillaSlabsWhenOutOfCarriers` | `false` | Show the nearest vanilla slab instead of a display when slab carriers run out |
 | `blocks.repairChunkSync` | `true` | Catch up block displays and Jade's real-block info for chunks a portal mod (Fancy Portals, Immersive Portals) sent itself |
 | `entities.nativeComponents` | `true` | Give modded clients a matching numbering of their mods' items and item data types, so creative-mode picks are read correctly |
+| `blocks.distantTerrainCarriers` | `true` | Send Voxy players' distant terrain (Voxy World Gen V2, Voxy Server Side) with the carriers they see up close, instead of the wrong blocks |
 | `companion.enabled` | `true` | Offer real blocks to players with the Polymer Patcher++ Client mod |
 
 ## Known limitations
