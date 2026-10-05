@@ -2,15 +2,10 @@ package me.drex.polymerpatcher.mixin.polymer;
 
 import eu.pb4.polymer.core.impl.networking.entry.PolymerBlockEntry;
 import me.drex.polymerpatcher.util.BlockSyncCheck;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.objectweb.asm.Opcodes;
 
 /**
@@ -29,51 +24,17 @@ import org.objectweb.asm.Opcodes;
  * <p>
  * The codec does not translate the state through Polymer. It writes the server's raw state number. Even
  * a vanilla carrier is unsafe here when another mod has added states to a vanilla block: every later raw
- * number can then refer to a different state on the client. The metadata therefore uses one early,
- * immutable vanilla state. This does not change the carrier in chunk/block-update packets; it is only the
- * default state stored in Polymer's optional client-side description of the server block. The returned
- * object is deliberately the server-registry token occupying barrier's pristine-client raw id; the
- * direct codec only observes that number.
+ * number can then refer to a different state on the client. The entry therefore keeps its semantic
+ * carrier for server-side integrations, while the serializer is handed the server-registry token that
+ * occupies that carrier's pristine-client raw id. The direct codec observes the safe number; Polymer and
+ * Jade still observe which carrier the block actually uses.
  */
 @Mixin(value = PolymerBlockEntry.class, remap = false)
 public class PolymerBlockEntryMixin {
 
-    @Inject(method = "of", at = @At("RETURN"), cancellable = true)
-    private static void polymerPatcher$onlyOfferReadableStates(Block block, CallbackInfoReturnable<PolymerBlockEntry> cir) {
-        PolymerBlockEntry entry = cir.getReturnValue();
-        if (entry == null) {
-            return;
-        }
-
-        BlockState visual = entry.visual();
-        if (visual == null) {
-            return;
-        }
-
-        if (BlockSyncCheck.isClientReadableMetadata(visual)) {
-            return;
-        }
-
-        Identifier id = BuiltInRegistries.BLOCK.getKey(block);
-        if (id != null) {
-            me.drex.polymerpatcher.util.BlockSyncCheck.note(id);
-        }
-
-        cir.setReturnValue(new PolymerBlockEntry(
-            entry.identifier(),
-            entry.numId(),
-            entry.hardness(),
-            entry.miningDeltaLogic(),
-            entry.text(),
-            BlockSyncCheck.clientReadableMetadata(),
-            entry.visualStack()
-        ));
-    }
-
     /**
-     * Last line of defence: replace the state at the exact serialization boundary. The earlier injection
-     * makes the record itself honest, while this redirect also covers another mod constructing or
-     * replacing an entry after {@link PolymerBlockEntry#of(Block)} returned.
+     * Translate the semantic state only at the exact serialization boundary. Keeping the record intact
+     * lets Polymer/Jade identify the block before its raw numeric id is made safe for the client.
      */
     @Redirect(
         method = "write",
@@ -85,10 +46,10 @@ public class PolymerBlockEntryMixin {
     )
     private BlockState polymerPatcher$serializeReadableState(PolymerBlockEntry entry) {
         BlockState visual = entry.visual();
-        if (!BlockSyncCheck.isClientReadableMetadata(visual)) {
+        if (!BlockSyncCheck.isClientReadableWorldState(visual)) {
             BlockSyncCheck.note(entry.identifier());
         }
-        return BlockSyncCheck.clientReadableMetadata();
+        return BlockSyncCheck.clientReadableWorldState(visual);
     }
 
 }

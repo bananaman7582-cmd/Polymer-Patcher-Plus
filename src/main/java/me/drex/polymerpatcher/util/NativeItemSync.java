@@ -179,11 +179,21 @@ public final class NativeItemSync {
                 return null;
             }
 
+            // Registry namespaces are not required to equal a Fabric mod id. Treat declared `provides`
+            // aliases as belonging to the exact same matched mod (Fancy Portals registers components in
+            // `iportal` while its actual mod id is `immersive_portals`).
+            Set<String> allSameVersion = new TreeSet<>(same);
+            for (String modId : same) {
+                FabricLoader.getInstance().getModContainer(modId).ifPresent(container ->
+                    allSameVersion.addAll(container.getMetadata().getProvides()));
+            }
+
             // Written down before anything below narrows it. Which mods a client has at this server's
-            // version is also what decides how its entity fields are numbered, and this is the first moment
-            // it is known - long before the client names its game channels. See NativeClients
+            // version is also what decides how its entity fields and component types are numbered, and
+            // this is the first moment it is known. Include declared aliases such as Fancy Portals'
+            // `iportal`, because registry namespaces need not equal the owning Fabric mod id.
             if (connectionOf(handler) instanceof NativeItemConnection known) {
-                known.polymerPatcher$setSameVersionMods(Set.copyOf(same));
+                known.polymerPatcher$setSameVersionMods(Set.copyOf(allSameVersion));
             }
 
             Set<String> hidden = hiddenNamespaces();
@@ -199,8 +209,11 @@ public final class NativeItemSync {
                 NOT_MATCHING.put(id, Collections.unmodifiableMap(different));
             }
 
-            if (same.isEmpty() || !ConfigManager.config().entities.nativeItems
-                || !ServerConfigurationNetworking.canSend(handler, RegistrySyncPayload.ID)) {
+            if (!ServerConfigurationNetworking.canSend(handler, RegistrySyncPayload.ID)) {
+                return null;
+            }
+
+            if (same.isEmpty() || !ConfigManager.config().entities.nativeItems) {
                 return null;
             }
 
@@ -297,6 +310,25 @@ public final class NativeItemSync {
             PENDING.put(id, new PendingCheck(name, included));
         }
         PolymerPatcher.LOGGER.info("Syncing {}'s item numbering for {} so they can be handed the real items", name, included);
+    }
+
+    /** Whether this configuration/play connection proved it has this registry namespace at our version. */
+    public static boolean hasMatchingNamespace(@Nullable PacketContext context, String namespace) {
+        if (RegistryPatcher.isVanillaId(Identifier.fromNamespaceAndPath(namespace, "probe"))) {
+            return true;
+        }
+        if (context == null) {
+            return false;
+        }
+        Connection connection = context.orElse(PacketContext.CONNECTION, null);
+        if (connection == null) {
+            ServerPlayer player = PolymerCommonUtils.getPlayer(context);
+            if (player != null && player.connection != null) {
+                connection = connectionOf(player.connection);
+            }
+        }
+        return connection instanceof NativeItemConnection state
+            && state.polymerPatcher$sameVersionMods().contains(namespace);
     }
 
     /**

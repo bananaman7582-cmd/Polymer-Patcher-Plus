@@ -1,7 +1,6 @@
 package me.drex.polymerpatcher.mixin.polymer;
 
 import eu.pb4.polymer.virtualentity.impl.compat.ImmersivePortalsUtils;
-import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.chunk.LevelChunk;
 import org.spongepowered.asm.mixin.Mixin;
@@ -30,8 +29,12 @@ public abstract class ImmersivePortalsTrackingMixin {
     @Inject(method = "getPlayerTracking", at = @At("RETURN"), cancellable = true, require = 0)
     private static void polymer_patcher$includeVanillaChunkViewers(LevelChunk chunk,
                                                                    CallbackInfoReturnable<List<ServerPlayer>> cir) {
-        List<ServerPlayer> ordinaryViewers = ((ServerChunkCache) chunk.getLevel().getChunkSource())
-            .chunkMap.getPlayers(chunk.getPos(), false);
+        // Portal implementations can replace PlayerChunkSender and deliberately throw from its pending
+        // query. Test the public tracking view directly instead of going through ChunkMap#getPlayers.
+        List<ServerPlayer> ordinaryViewers = chunk.getLevel().getServer().getPlayerList().getPlayers().stream()
+            .filter(player -> player.level() == chunk.getLevel())
+            .filter(player -> player.getChunkTrackingView().contains(chunk.getPos().x(), chunk.getPos().z()))
+            .toList();
         List<ServerPlayer> portalViewers = cir.getReturnValue();
 
         if (portalViewers == null || portalViewers.isEmpty()) {

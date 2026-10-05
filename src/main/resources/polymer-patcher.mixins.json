@@ -17,6 +17,7 @@
 		"block.CompanionBreakSoundMixin",
 		"block.ServerLevelCompanionSoundMixin",
 		"polymer.CoreBridgeMixin",
+		"polymer.DataComponentTypeMixin",
 		"item.ArmourAbilityMixin",
 		"item.EnchantmentMixin",
 		"item.CompoundTagAccessor",

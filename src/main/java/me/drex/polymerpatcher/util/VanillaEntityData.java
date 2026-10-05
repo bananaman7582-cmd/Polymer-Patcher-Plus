@@ -536,7 +536,7 @@ public final class VanillaEntityData {
             indexMap(net.minecraft.server.level.ServerPlayer.class, Set.of());
             indexMap(net.minecraft.world.entity.item.ItemEntity.class, Set.of());
         } catch (Throwable e) {
-            PolymerPatcher.LOGGER.warn("[dd] could not prewarm the diagnostic layouts", e);
+            PolymerPatcher.LOGGER.warn("Could not prewarm the tracked-data layouts", e);
         }
 
         PolymerPatcher.LOGGER.info("Worked out the tracked data of {} entity type(s) up front, so nothing has to while players are connected", warmed);
@@ -781,7 +781,7 @@ public final class VanillaEntityData {
             int keep = keepExtras ? serverCount : Math.min(vanillaCount, serverCount);
 
             // TEMPORARY DIAGNOSTIC - remove once the numbering is understood
-            PolymerPatcher.LOGGER.info("[dd] {} of {}: vanilla={} allocated={} inherited={} serverCount={} keep={} adders={} declaredIds={} serverIds={}..{} -> clientIds={}..{}",
+            PolymerPatcher.LOGGER.debug("{} of {}: vanilla={} allocated={} inherited={} serverCount={} keep={} adders={} declaredIds={} serverIds={}..{} -> clientIds={}..{}",
                 type.getSimpleName(), layout.entityClass().getSimpleName(),
                 vanillaCount, allocated, inherited, serverCount, keep, adders, ids,
                 serverNextId, serverNextId + serverCount - 1,
