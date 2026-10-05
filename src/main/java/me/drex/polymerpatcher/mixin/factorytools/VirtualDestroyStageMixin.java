@@ -12,6 +12,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.shapes.CollisionContext;
@@ -39,7 +40,11 @@ import java.util.List;
 @Mixin(value = VirtualDestroyStage.class, remap = false)
 public abstract class VirtualDestroyStageMixin extends ElementHolder implements VirtualDestroyStageExt {
     @Unique
-    private static final int POLYMER_PATCHER$MAX_PARTS = 24;
+    /**
+     * More boxes than this after merging and the outline is wrapped in one crack instead. A crack per box reads
+     * as several blocks breaking at once, which is what a dozen tiny boxes looked like.
+     */
+    private static final int POLYMER_PATCHER$MAX_PARTS = 4;
 
     @Unique
     private static final float POLYMER_PATCHER$OVERLAY_SCALE = 1.02f;
@@ -94,7 +99,12 @@ public abstract class VirtualDestroyStageMixin extends ElementHolder implements 
             return;
         }
 
-        List<AABB> boxes = shape.toAabbs();
+        // Merged first. A mod is free to build its outline out of many small boxes - some full blocks are a
+        // cube made of eight - and a crack drawn per box put a separate crack on every tile of one block,
+        // which looked like several blocks breaking at once. A full block always gets the single crack
+        // FactoryTools would draw.
+        shape = shape.optimize();
+        List<AABB> boxes = Block.isShapeFullBlock(shape) ? List.of(new AABB(0, 0, 0, 1, 1, 1)) : shape.toAabbs();
         if (boxes.size() > POLYMER_PATCHER$MAX_PARTS) {
             boxes = List.of(shape.bounds());
         }
