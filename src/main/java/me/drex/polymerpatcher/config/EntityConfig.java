@@ -100,6 +100,17 @@ public class EntityConfig {
     public boolean nativeItems = true;
 
     /**
+     * Whether a client handed real items is also told how this server numbers the item data types of the
+     * mods it has, so an item it sends back - a creative-mode pick, above all - is read as what it is.
+     * <p>
+     * Without it a client numbers those types by itself, in the order its own mods registered them, and
+     * this server read a Fancy Portals command stick's command as a portal wand's settings and dropped the
+     * player. See {@link me.drex.polymerpatcher.util.ComponentNumbering}. Only takes effect alongside
+     * {@link #nativeItems}; if a modded player cannot join after this is turned on, turn it off.
+     */
+    public boolean nativeComponents = true;
+
+    /**
      * Whether a player whose copy of one of this server's content mods is a different version is
      * disconnected, with a screen naming the version to install.
      * <p>

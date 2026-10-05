@@ -130,4 +130,12 @@ public class BlockConfig {
      * slabs placed by the thousand - there are just eight carrier states for the upper half of a block.
      */
     public boolean vanillaSlabsWhenOutOfCarriers = false;
+
+    /**
+     * Whether block displays and the real-block list Jade reads are caught up for chunks that reached a
+     * player without passing through vanilla's chunk sending. A portal mod built on Immersive Portals sends
+     * chunks itself, and without this every display-drawn block in them stays invisible. Costs a look over
+     * each player's loaded chunks once a second.
+     */
+    public boolean repairChunkSync = true;
 }
