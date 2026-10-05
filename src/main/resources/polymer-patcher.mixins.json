@@ -63,7 +63,7 @@
 		"sync.ElementHolderMixin",
 		"sync.ServerPlayerMenuMixin",
 		"sync.ConnectionNativeItemsMixin",
-		"sync.ComponentTypeCodecMixin",
+		"sync.ClientNumberCodecMixin",
 		"sync.PacketDecoderMixin",
 		"sync.ConnectionEarlyFaultMixin",
 		"sync.ServerConfigurationKnownPacksMixin",
