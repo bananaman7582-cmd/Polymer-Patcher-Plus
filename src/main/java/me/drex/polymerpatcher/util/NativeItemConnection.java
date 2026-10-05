@@ -1,5 +1,7 @@
 package me.drex.polymerpatcher.util;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Set;
 
 /**
@@ -17,4 +19,9 @@ public interface NativeItemConnection {
     Set<String> polymerPatcher$sameVersionMods();
 
     void polymerPatcher$setSameVersionMods(Set<String> mods);
+
+    /** The data type numbering this connection's client was told to use, or null where it keeps its own. */
+    @Nullable ComponentNumbering polymerPatcher$componentNumbering();
+
+    void polymerPatcher$setComponentNumbering(@Nullable ComponentNumbering numbering);
 }

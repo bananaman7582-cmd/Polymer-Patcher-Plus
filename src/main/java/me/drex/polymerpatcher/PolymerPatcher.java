@@ -69,6 +69,7 @@ public class PolymerPatcher implements DedicatedServerModInitializer {
         me.drex.polymerpatcher.item.ConvertedMaps.init();
         me.drex.polymerpatcher.item.MapDecorationFallbacks.init();
         me.drex.polymerpatcher.util.NativeItemSync.init();
+        me.drex.polymerpatcher.util.ChunkSyncRepair.init();
         me.drex.polymerpatcher.block.fluid.ModdedFluidPhysics.init();
         me.drex.polymerpatcher.item.AirMiningFeedback.init();
 
@@ -89,6 +90,7 @@ public class PolymerPatcher implements DedicatedServerModInitializer {
                 me.drex.polymerpatcher.util.HolderRefresh.forget(handler.getPlayer());
                 me.drex.polymerpatcher.util.ModdedMenus.forget(handler.getPlayer());
                 me.drex.polymerpatcher.util.NativeItemSync.forget(handler.getPlayer());
+                me.drex.polymerpatcher.util.ChunkSyncRepair.forget(handler.getPlayer());
                 me.drex.polymerpatcher.block.fluid.ModdedFluidPhysics.forget(handler.getPlayer());
                 CompatibilityModules.forget(handler.getPlayer());
 

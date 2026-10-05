@@ -198,10 +198,14 @@ public final class NativeItemSync {
 
             Set<String> hidden = hiddenNamespaces();
             int matching = same.size();
-            same.retainAll(hidden);
+            // Items are found by the namespace they are registered under, which need not be the mod's id:
+            // Fancy Portals is immersive_portals and registers its items as iportal. Matched by mod id
+            // alone, its items were never put back for a client that has it, and stayed stand-ins
+            Set<String> sameNamespaces = new TreeSet<>(allSameVersion);
+            sameNamespaces.retainAll(hidden);
             different.keySet().retainAll(hidden);
             PolymerPatcher.LOGGER.info("{} has {} of this server's mods at the same version; of the ones with server-only content: {}",
-                ownerName(handler), matching, same.isEmpty() ? "none" : same);
+                ownerName(handler), matching, sameNamespaces.isEmpty() ? "none" : sameNamespaces);
 
             // Written down whether or not a mismatch is grounds for turning anybody away: it is also what
             // the player is told about on joining, and that is worth saying even when they are let in
@@ -213,7 +217,7 @@ public final class NativeItemSync {
                 return null;
             }
 
-            if (same.isEmpty() || !ConfigManager.config().entities.nativeItems) {
+            if (sameNamespaces.isEmpty() || !ConfigManager.config().entities.nativeItems) {
                 return null;
             }
 
@@ -236,7 +240,7 @@ public final class NativeItemSync {
                 if (RegistrySyncUtils.isServerEntry(BuiltInRegistries.ITEM, item)) {
                     // A mod registering under the game's own name is still left as a stand-in: the name says
                     // nothing about which mod it is, so there is no pack to match it against
-                    if (RegistryPatcher.isVanillaId(key) || !same.contains(key.getNamespace())) {
+                    if (RegistryPatcher.isVanillaId(key) || !sameNamespaces.contains(key.getNamespace())) {
                         if (number < firstHole) {
                             firstHole = number;
                             holeBelongsTo = key.getNamespace();
@@ -274,6 +278,16 @@ public final class NativeItemSync {
 
             Map<Identifier, Object2IntMap<Identifier>> sync = new LinkedHashMap<>();
             sync.put(ITEM_REGISTRY, items);
+
+            // The item data types of the same mods, numbered so an item the client sends back - a creative
+            // pick above all - can be read. In this sync and nowhere else: see ComponentNumbering
+            if (ConfigManager.config().entities.nativeComponents) {
+                ComponentNumbering numbering = ComponentNumbering.forNamespaces(allSameVersion);
+                if (numbering != null) {
+                    sync.put(ComponentNumbering.REGISTRY, numbering.clientIds());
+                    state.polymerPatcher$setComponentNumbering(numbering);
+                }
+            }
             return sync;
         } catch (Throwable e) {
             // Anything unexpected falls back to exactly what would have happened without this
@@ -309,26 +323,8 @@ public final class NativeItemSync {
         if (id != null) {
             PENDING.put(id, new PendingCheck(name, included));
         }
-        PolymerPatcher.LOGGER.info("Syncing {}'s item numbering for {} so they can be handed the real items", name, included);
-    }
-
-    /** Whether this configuration/play connection proved it has this registry namespace at our version. */
-    public static boolean hasMatchingNamespace(@Nullable PacketContext context, String namespace) {
-        if (RegistryPatcher.isVanillaId(Identifier.fromNamespaceAndPath(namespace, "probe"))) {
-            return true;
-        }
-        if (context == null) {
-            return false;
-        }
-        Connection connection = context.orElse(PacketContext.CONNECTION, null);
-        if (connection == null) {
-            ServerPlayer player = PolymerCommonUtils.getPlayer(context);
-            if (player != null && player.connection != null) {
-                connection = connectionOf(player.connection);
-            }
-        }
-        return connection instanceof NativeItemConnection state
-            && state.polymerPatcher$sameVersionMods().contains(namespace);
+        PolymerPatcher.LOGGER.info("Syncing {}'s item numbering for {} so they can be handed the real items{}", name, included,
+            sync.containsKey(ComponentNumbering.REGISTRY) ? ", with item data types renumbered to match" : "");
     }
 
     /**
@@ -566,6 +562,7 @@ public final class NativeItemSync {
         try {
             if (connectionOf(handler) instanceof NativeItemConnection state) {
                 state.polymerPatcher$setSyncedItemNamespaces(Set.of());
+                state.polymerPatcher$setComponentNumbering(null);
             }
         } catch (Throwable ignored) {
             // Nothing was set, then

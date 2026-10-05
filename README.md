@@ -105,6 +105,8 @@ The client mod is for joining servers; do not install it together with Polymer P
 | `blocks.replayModdedBlockAmbience` | `true` | Replay modded blocks' ambient particles |
 | `blocks.blockAmbienceExcludedMods` | `[]` | Mods whose block ambience is left out |
 | `blocks.vanillaSlabsWhenOutOfCarriers` | `false` | Show the nearest vanilla slab instead of a display when slab carriers run out |
+| `blocks.repairChunkSync` | `true` | Catch up block displays and Jade's real-block info for chunks a portal mod (Fancy Portals, Immersive Portals) sent itself |
+| `entities.nativeComponents` | `true` | Renumber item data types for clients handed real items, so creative-mode picks are read correctly |
 | `companion.enabled` | `true` | Offer real blocks to players with the Polymer Patcher++ Client mod |
 
 ## Known limitations

@@ -1,8 +1,10 @@
 package me.drex.polymerpatcher.mixin.sync;
 
+import me.drex.polymerpatcher.util.ComponentNumbering;
 import me.drex.polymerpatcher.util.NativeItemConnection;
 import net.minecraft.network.Connection;
 import org.spongepowered.asm.mixin.Mixin;
+import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Unique;
 
 import java.util.Set;
@@ -47,5 +49,18 @@ public abstract class ConnectionNativeItemsMixin implements NativeItemConnection
     @Override
     public void polymerPatcher$setSameVersionMods(Set<String> mods) {
         this.polymerPatcher$sameVersionMods = mods;
+    }
+
+    @Unique
+    private volatile @Nullable ComponentNumbering polymerPatcher$componentNumbering;
+
+    @Override
+    public @Nullable ComponentNumbering polymerPatcher$componentNumbering() {
+        return this.polymerPatcher$componentNumbering;
+    }
+
+    @Override
+    public void polymerPatcher$setComponentNumbering(@Nullable ComponentNumbering numbering) {
+        this.polymerPatcher$componentNumbering = numbering;
     }
 }
