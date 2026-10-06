@@ -317,6 +317,9 @@ public final class RenderRegistryGenerator {
                 }
 
                 EntityRenderDispatcher entityRenderDispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
+                if (entityRenderDispatcher.getRenderer(entity) == null) {
+                    continue;
+                }
                 EntityRenderState renderState = entityRenderDispatcher.extractEntity(entity, 0.0F);
                 EntityRenderer<?, ? super EntityRenderState> renderer = entityRenderDispatcher.getRenderer(renderState);
 
@@ -339,7 +342,7 @@ public final class RenderRegistryGenerator {
                     }
                 );
             } catch (Throwable e) {
-                PolymerPatcherDumper.LOGGER.warn("Failed to render entity: {}", entityType);
+                PolymerPatcherDumper.LOGGER.warn("Failed to render entity: {}", entityType, e);
             }
         }
     }
@@ -360,8 +363,7 @@ public final class RenderRegistryGenerator {
     private static void collectRegisteredModelLayers(RenderRegistry registry) {
         Map<ModelLayerLocation, ?> providers;
         try {
-            Class<?> impl = Class.forName("net.fabricmc.fabric.impl.client.rendering.EntityModelLayerImpl");
-            providers = (Map<ModelLayerLocation, ?>) impl.getField("PROVIDERS").get(null);
+            providers = registeredLayerProviders();
         } catch (Throwable e) {
             PolymerPatcherDumper.LOGGER.warn("Could not read the registered model layers; armour with a model of its own will not be dumped", e);
             return;
@@ -387,6 +389,24 @@ public final class RenderRegistryGenerator {
         }
 
         PolymerPatcherDumper.LOGGER.info("Added {} model layer(s) that nothing was seen wearing", added);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<ModelLayerLocation, ?> registeredLayerProviders() throws ReflectiveOperationException {
+        String[] impls = {
+            "net.fabricmc.fabric.impl.client.rendering.ModelLayerImpl",
+            "net.fabricmc.fabric.impl.client.rendering.EntityModelLayerImpl"
+        };
+
+        ReflectiveOperationException failure = null;
+        for (String impl : impls) {
+            try {
+                return (Map<ModelLayerLocation, ?>) Class.forName(impl).getField("PROVIDERS").get(null);
+            } catch (ReflectiveOperationException e) {
+                failure = e;
+            }
+        }
+        throw failure;
     }
 
     private static void collectBlockData(RenderRegistry registry) {

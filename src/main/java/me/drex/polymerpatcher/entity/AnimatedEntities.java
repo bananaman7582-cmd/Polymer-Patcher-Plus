@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import me.drex.polymerpatcher.entity.plain.PlainModel;
 import java.util.stream.Collectors;
 
 public class AnimatedEntities {
@@ -479,6 +480,29 @@ public class AnimatedEntities {
             CitadelModel.warmAnimator(model);
         }
         if (living && !CitadelModel.isCitadelModel(model)) {
+            // A model built by hand in the renderer's constructor rather than from a registered layer:
+            // MCreator's generated renderers are the usual case, and they recorded no layer at dump time,
+            // so the layer path above never sees them. The parts are read straight off the model the
+            // renderer is holding, filed under a layer named after the entity, and registered exactly as
+            // a baked one is - which keeps the animation, the posing and the texture choice that path
+            // already has, instead of a second hand-rolled posing path that never ran setupAnim.
+            if (model instanceof EntityModel<?> plainModel) {
+                try {
+                    List<ModelPart> parts = PlainModel.roots(plainModel);
+                    if (PlainModel.hasGeometry(parts) && !texturesFor(entityId, renderInfo).isEmpty()) {
+                        ModelLayerLocation layer = new ModelLayerLocation(entityId, "main");
+                        for (Identifier texture : texturesFor(entityId, renderInfo)) {
+                            registerEntity(renderInfo.type(), entityRenderer, layer, parts, texture);
+                        }
+                        tally.layers++;
+                        PolymerPatcher.LOGGER.debug("Read {} plain model part(s) for {} from {}",
+                            parts.size(), entityId, model.getClass().getName());
+                        return;
+                    }
+                } catch (Throwable t) {
+                    PolymerPatcher.LOGGER.debug("Failed to read plain EntityModel for {}", entityId, t);
+                }
+            }
             tally.skip("whose model is not one this can read", entityId);
             PolymerPatcher.LOGGER.debug("{} draws {} with {}, which is not a model this can read",
                 entityRenderer.getClass().getName(), entityId, model == null ? "nothing" : model.getClass().getName());

@@ -210,8 +210,8 @@ public final class NativeItemSync {
             Set<String> sameNamespaces = new TreeSet<>(allSameVersion);
             sameNamespaces.retainAll(hidden);
             different.keySet().retainAll(hidden);
-            PolymerPatcher.LOGGER.info("{} has {} of this server's mods at the same version; of the ones with server-only content: {}",
-                ownerName(handler), matching, sameNamespaces.isEmpty() ? "none" : sameNamespaces);
+            PolymerPatcher.LOGGER.info("{} has {} of this server's mods at the same version ({}); of the ones with server-only content: {}",
+                ownerName(handler), matching, same, sameNamespaces.isEmpty() ? "none" : sameNamespaces);
 
             // Written down whether or not a mismatch is grounds for turning anybody away: it is also what
             // the player is told about on joining, and that is worth saying even when they are let in
@@ -237,7 +237,19 @@ public final class NativeItemSync {
                 if (items == null) {
                     renumber(state, sync, BuiltInRegistries.ITEM, allSameVersion);
                 }
-                renumber(state, sync, BuiltInRegistries.DATA_COMPONENT_TYPE, allSameVersion);
+                // A mod's data types are also numbered for a client that has the mod at another version. The
+                // channels it lists say which mods it has, and a Fancy Portals wand picked from its own tabs
+                // arrives under the client's number for the wand's data type - a number this server reads as
+                // another type, which drops the player decoding it (the "create_portal" kick). Its mod needs
+                // no version match for that: only the data types are involved, and either one exists at both
+                // ends or neither
+                Set<String> componentNamespaces = new TreeSet<>(allSameVersion);
+                addChannelsWithComponentTypes(handler, componentNamespaces);
+                if (componentNamespaces.size() > allSameVersion.size()) {
+                    PolymerPatcher.LOGGER.info("{} also has the data types of mods numbered that they have at another version: {}",
+                        ownerName(handler), componentNamespaces);
+                }
+                renumber(state, sync, BuiltInRegistries.DATA_COMPONENT_TYPE, componentNamespaces);
             }
             return sync.isEmpty() ? null : sync;
         } catch (Throwable e) {
@@ -562,6 +574,46 @@ public final class NativeItemSync {
     }
 
     private static final Map<ServerGamePacketListenerImpl, Refusal> REFUSALS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Namespaces of the data types Polymer hides from clients: the component types that exist only here. */
+    private static volatile @Nullable Set<String> componentNamespaces;
+
+    private static Set<String> componentNamespaces() {
+        Set<String> known = componentNamespaces;
+        if (known == null) {
+            Set<String> found = new HashSet<>();
+            collectServerEntries(BuiltInRegistries.DATA_COMPONENT_TYPE, found);
+            found.remove("minecraft");
+            componentNamespaces = known = found.isEmpty() ? Set.of() : Set.copyOf(found);
+        }
+        return known;
+    }
+
+    /**
+     * Adds the namespaces whose mods the client's channels show it has - whether or not it has them at this
+     * server's version - when those mods have data types this server does not send to strangers. They are
+     * what a creative pick can carry back under a client-chosen number, and a version match is not needed
+     * to agree on them: a component type either exists at both ends or does not.
+     */
+    private static void addChannelsWithComponentTypes(ServerConfigurationPacketListenerImpl handler, Set<String> into) {
+        Set<String> available = componentNamespaces();
+        if (available.isEmpty()) {
+            return;
+        }
+        try {
+            Set<Identifier> channels = new HashSet<>(ServerConfigurationNetworking.getSendable(handler));
+            if (connectionOf(handler) instanceof ChannelInfoHolder holder) {
+                channels.addAll(List.copyOf(holder.fabric_getPendingChannelsNames(ConnectionProtocol.PLAY)));
+            }
+            for (Identifier channel : channels) {
+                if (available.contains(channel.getNamespace())) {
+                    into.add(channel.getNamespace());
+                }
+            }
+        } catch (Throwable e) {
+            PolymerPatcher.LOGGER.debug("Could not read a joining client's channels to number its mods' data types", e);
+        }
+    }
 
     static {
         net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(server -> {
