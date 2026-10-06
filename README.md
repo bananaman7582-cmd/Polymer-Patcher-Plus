@@ -109,6 +109,22 @@ The client mod is for joining servers; do not install it together with Polymer P
 | `entities.nativeComponents` | `true` | Give modded clients a matching numbering of their mods' items and item data types, so creative-mode picks are read correctly |
 | `blocks.distantTerrainCarriers` | `true` | Send Voxy players' distant terrain (Voxy World Gen V2, Voxy Server Side) with the carriers they see up close, instead of the wrong blocks |
 | `companion.enabled` | `true` | Offer real blocks to players with the Polymer Patcher++ Client mod |
+| `resources.autoSplitLargePacks` | `true` | Send an oversized pack as several packs instead of one, since a vanilla client refuses a single pack above its size limit |
+| `resources.maxSplitPackSizeMiB` | `230` | The largest each split pack may be, in MiB. Anything at or above the client's own 250 MiB limit is capped below it |
+
+## Oversized packs
+
+A client refuses a single resource pack above a fixed size, so a pack built from a lot of mods can end up
+too big to be sent at all - players get vanilla stand-ins for everything, with nothing in the log to say why.
+
+When the generated pack goes over the limit it is cut into several packs, by namespace where possible, and
+all of them are sent. Nothing is lost and nothing changes for the player: each piece is a complete resource
+pack with its own `pack.mcmeta`, and together they hold exactly what the one pack held. Players need nothing
+installed. The pieces are written beside the pack in `polymer/split/`, reused unchanged while the pack stays
+unchanged, and the log says what was split, how big each piece is, and what each is served as.
+
+Packs under the limit, and servers that host the pack themselves rather than letting Polymer serve it, are
+left exactly as they were.
 
 ## Known limitations
 

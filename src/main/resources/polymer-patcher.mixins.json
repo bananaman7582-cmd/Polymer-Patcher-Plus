@@ -54,6 +54,7 @@
 		"polymer.PacketPatcherMixin",
 		"polymer.PolymerBlockEntryMixin",
 		"polymer.PolymerBlockUtilsMixin",
+		"polymer.SplitAutoHostMixin",
 		"registry.BuiltInRegistriesMixin",
 		"registry.RegistryMixin",
 		"sync.ClientboundCommandsPacketMixin",

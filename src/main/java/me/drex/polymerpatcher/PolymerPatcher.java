@@ -79,6 +79,9 @@ public class PolymerPatcher implements DedicatedServerModInitializer {
         me.drex.polymerpatcher.util.HolderRefresh.init();
         ExtraResourcePacks.init();
         ResourcePackGenerator.setup();
+        // Before the pack is built, so a finished pack is measured and cut up before anyone can be
+        // told about it; it needs the provider above and Polymer's finished-pack event to be in place
+        me.drex.polymerpatcher.resources.SplitResourcePacks.init();
         PolymerResourcePackUtils.addModAssets(MOD_ID);
         ColorMapHelper.init();
         me.drex.polymerpatcher.entity.armor.ArmorAttachments.init();

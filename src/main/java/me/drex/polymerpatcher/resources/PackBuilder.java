@@ -54,7 +54,7 @@ public final class PackBuilder {
      * Read rather than asked for, because the setting lives in another mod's config and there is no
      * call for it. Unreadable is treated as on, which costs a rebuild and nothing else.
      */
-    private static boolean autoHostEnabled() {
+    public static boolean autoHostEnabled() {
         Path config = FabricLoader.getInstance().getConfigDir().resolve("polymer").resolve("auto-host.json");
         if (!Files.exists(config)) {
             return true;

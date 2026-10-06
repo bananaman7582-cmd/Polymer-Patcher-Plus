@@ -83,4 +83,35 @@ public class ResourceConfig {
      * Where the extra packs live, relative to the config directory.
      */
     public String extraResourcePacksFolder = "polymer-patcher/resource_packs";
+
+    /**
+     * Split the finished pack into several smaller packs when it is too big for one download.
+     * <p>
+     * A vanilla client refuses a single server resource pack above a fixed size, and on a server this
+     * heavily modded the generated pack had reached 343 MB - so the pack itself was fine, it downloaded
+     * perfectly well in a browser, and the game would not take it. That leaves nobody any textures at
+     * all, and nothing in the world says why.
+     * <p>
+     * So when the finished pack is over the limit below, it is cut at resource-file boundaries into
+     * several packs small enough to be accepted, and all of them are pushed to clients with the game's
+     * own support for several server packs at once. Together they hold exactly the files the one pack
+     * held, so nothing looks different - and nothing needs a client mod, a higher download limit, or an
+     * admin splitting packs by hand.
+     * <p>
+     * Turn this off to send the pack as one file however large it is, which is the old behaviour.
+     */
+    public boolean autoSplitLargePacks = true;
+
+    /**
+     * The largest pack a fragment is allowed to be, in MiB.
+     * <p>
+     * The client's own ceiling is 250 MiB, which is deliberately not the number to aim at: a fragment
+     * written at exactly the limit is one re-compression away from being rejected, and the server would
+     * then be sending a pack no client can take. 230 MiB leaves room for the estimate to be wrong, which
+     * it is measured and corrected for anyway.
+     * <p>
+     * Smaller is always safe. Very small is not useful - a namespace is kept whole where it can be, so a
+     * limit below the size of the biggest one makes for a lot of fragments.
+     */
+    public int maxSplitPackSizeMiB = 230;
 }
