@@ -18,6 +18,7 @@ import net.minecraft.world.item.ItemUseAnimation;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.entity.LivingEntity;
 import eu.pb4.polymer.common.api.PolymerCommonUtils;
+import me.drex.polymerpatcher.PolymerPatcher;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.world.level.block.state.BlockState;
@@ -46,12 +47,34 @@ public record PolyBaseItem(Item item) implements PolymerItem {
         int count = itemStack.getCount();
         if (count <= MAX_WRITTEN_COUNT) {
             return keepDamageOutOfIdentity(
-                PolymerItem.super.getPolymerItemStack(itemStack, tooltipType, context, lookup), itemStack);
+                transformSafely(itemStack, tooltipType, context, lookup), itemStack);
         }
 
-        ItemStack written = PolymerItem.super.getPolymerItemStack(itemStack.copyWithCount(MAX_WRITTEN_COUNT), tooltipType, context, lookup);
+        ItemStack written = transformSafely(itemStack.copyWithCount(MAX_WRITTEN_COUNT), tooltipType, context, lookup);
         written.setCount(count);
         return keepDamageOutOfIdentity(written, itemStack);
+    }
+
+    /**
+     * The transform inside Polymer's encode writes a {@code sync/items} payload as it goes and, when
+     * anything throws, swallows the throw and sends the client the truncated stream anyway, which
+     * disconnects the player at decode time. A single item whose components cannot be encoded - a
+     * mod registering a component type lazily after its registry froze is what has done it so far -
+     * must therefore cost that item its stand-in, not every client its connection.
+     */
+    private ItemStack transformSafely(ItemStack source, TooltipFlag tooltipType, PacketContext context,
+                                      HolderLookup.Provider lookup) {
+        try {
+            return PolymerItem.super.getPolymerItemStack(source, tooltipType, context, lookup);
+        } catch (Throwable t) {
+            PolymerPatcher.LOGGER.error(
+                "Could not transform {} for a vanilla client; sending a bare stand-in instead", source, t);
+            try {
+                return new ItemStack(getPolymerItem(source, context), source.getCount());
+            } catch (Throwable t2) {
+                return new ItemStack(Items.TRIAL_KEY, source.getCount());
+            }
+        }
     }
 
     /**

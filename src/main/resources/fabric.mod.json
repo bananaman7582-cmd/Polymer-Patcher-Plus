@@ -14,6 +14,9 @@
 	"icon": "assets/polymer-patcher/icon.png",
 	"environment": "*",
 	"entrypoints": {
+		"main": [
+			"me.drex.polymerpatcher.PolymerPatcherMain"
+		],
 		"server": [
 			"me.drex.polymerpatcher.PolymerPatcher"
 		],
