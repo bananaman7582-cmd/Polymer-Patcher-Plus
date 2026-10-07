@@ -3,6 +3,7 @@ package me.drex.polymerpatcher.registry;
 import me.drex.polymerpatcher.PolymerPatcher;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistrySynchronization;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -75,6 +76,9 @@ public final class ReadableRegistryData {
             // And what the mod draws for itself and the client cannot: a cave biome lit from a mod's own
             // renderer is pitch black without it, and the game has somewhere to put that light now
             readable = ModBiomeLight.lit(registry, registries, entry.id(), readable);
+            if (Registries.ENCHANTMENT.equals(registry)) {
+                readable = readableEnchantment(readable, registry.identifier() + " " + entry.id());
+            }
             if (readable != data) {
                 if (changed == null) {
                     changed = new ArrayList<>(entries);
@@ -159,6 +163,156 @@ public final class ReadableRegistryData {
     private static boolean namesAMod(String key) {
         int colon = key.indexOf(':');
         return colon > 0 && !key.startsWith(Identifier.DEFAULT_NAMESPACE + ":");
+    }
+
+    /**
+     * A strip just for enchantments, where a value, not a key, is the problem.
+     * <p>
+     * The generic walk above leaves out anything keyed by a mod's name. A mod can also rewrite a vanilla
+     * enchantment in place, and then its name shows up inside a value: Subtle adds an {@code is_wet}
+     * condition to the effects of the vanilla impaling enchantment, and a client reads a condition's id
+     * from a string, not a map key, so the whole enchantment fails to load. The effect entry, not the
+     * string, is the unit the game can do without; an entry is trimmed so what the client can read stays.
+     */
+    private static Tag readableEnchantment(Tag data, String entry) {
+        if (!(data instanceof CompoundTag compound)) {
+            return data;
+        }
+        Tag effectsRaw = compound.get("effects");
+        Tag effects = rewriteEnchantmentEffects(effectsRaw, entry);
+        if (effects == effectsRaw) {
+            return data;
+        }
+        CompoundTag rewritten = compound.copy();
+        rewritten.put("effects", effects);
+        return rewritten;
+    }
+
+    private static Tag rewriteEnchantmentEffects(Tag effectsRaw, String entry) {
+        if (!(effectsRaw instanceof CompoundTag effects)) {
+            return effectsRaw;
+        }
+        CompoundTag rewritten = null;
+        for (String kind : List.copyOf(effects.keySet())) {
+            Tag listRaw = effects.get(kind);
+            if (!(listRaw instanceof ListTag entries)) {
+                continue;
+            }
+            ListTag trimmed = new ListTag();
+            boolean changed = false;
+            for (Tag item : entries) {
+                Tag readable = readableEnchantmentEffect(item, entry);
+                if (readable == null) {
+                    changed = true;
+                } else {
+                    trimmed.add(readable);
+                    changed |= readable != item;
+                }
+            }
+            if (!changed) {
+                continue;
+            }
+            if (rewritten == null) {
+                rewritten = effects.copy();
+            }
+            if (trimmed.isEmpty()) {
+                rewritten.remove(kind);
+            } else {
+                rewritten.put(kind, trimmed);
+            }
+        }
+        return rewritten == null ? effectsRaw : rewritten;
+    }
+
+    /** Null where the client cannot read the effect at all; a trimmed copy where part of it will do. */
+    private static @Nullable Tag readableEnchantmentEffect(Tag item, String entry) {
+        if (!(item instanceof CompoundTag effect)) {
+            return item;
+        }
+
+        CompoundTag rewritten = null;
+        Tag requirements = effect.get("requirements");
+        if (requirements != null) {
+            Tag readable = readableRequirements(requirements, entry);
+            if (readable == null) {
+                report(entry + " is gated by a condition only its own mod knows; that check is left out");
+                rewritten = effect.copy();
+                rewritten.remove("requirements");
+            } else if (readable != requirements) {
+                rewritten = effect.copy();
+                rewritten.put("requirements", readable);
+            }
+        }
+
+        Tag effectBody = (rewritten != null ? rewritten : effect).get("effect");
+        if (effectBody instanceof CompoundTag body) {
+            Tag type = body.get("type");
+            String name = type == null ? null : type.asString().orElse(null);
+            if (name != null && namesAMod(name)) {
+                report(entry + " has an effect only its own mod can read; that effect is left out");
+                return null;
+            }
+        }
+        return rewritten == null ? item : rewritten;
+    }
+
+    /** Null where nothing a client reads remains; otherwise the same or a trimmed copy. */
+    private static @Nullable Tag readableRequirements(Tag requirements, String entry) {
+        if (!(requirements instanceof CompoundTag compound)) {
+            return requirements;
+        }
+        CompoundTag rewritten = null;
+        for (String key : List.copyOf(compound.keySet())) {
+            Tag value = compound.get(key);
+            if (key.equals("terms") && value instanceof ListTag terms) {
+                ListTag kept = new ListTag();
+                int dropped = 0;
+                for (Tag term : terms) {
+                    if (refersToAMod(term)) {
+                        dropped++;
+                    } else {
+                        kept.add(term);
+                    }
+                }
+                if (dropped == 0) {
+                    continue;
+                }
+                report(entry + " is only sometimes gated by a condition its own mod knows; that check is left out");
+                if (kept.isEmpty()) {
+                    return null;
+                }
+                rewritten = rewritten == null ? compound.copy() : rewritten;
+                rewritten.put(key, kept);
+            } else if (refersToAMod(value)) {
+                return null;
+            }
+        }
+        return rewritten == null ? compound : rewritten;
+    }
+
+    /** Whether this tag, anywhere inside it, names something only a mod can look up. */
+    private static boolean refersToAMod(Tag tag) {
+        if (tag instanceof StringTag string) {
+            String name = string.asString().orElse("");
+            if (name.startsWith("#")) {
+                name = name.substring(1);
+            }
+            return namesAMod(name);
+        }
+        if (tag instanceof CompoundTag compound) {
+            for (String key : compound.keySet()) {
+                if (refersToAMod(compound.get(key))) {
+                    return true;
+                }
+            }
+        } else if (tag instanceof ListTag list) {
+            for (Tag item : list) {
+                if (refersToAMod(item)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static void report(String what) {

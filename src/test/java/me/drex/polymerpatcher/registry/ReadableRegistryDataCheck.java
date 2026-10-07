@@ -29,6 +29,10 @@ public final class ReadableRegistryDataCheck {
         checkTimeline();
         checkVanillaUntouched();
         checkNestedInsideLists();
+        checkEnchantmentTermTrimmed();
+        checkEnchantmentGateDropped();
+        checkEnchantmentEffectDropped();
+        checkEnchantmentVanillaUntouched();
         System.out.println("Verified registry data is left readable by a client without the mod");
     }
 
@@ -115,6 +119,146 @@ public final class ReadableRegistryDataCheck {
             "a value inside a list is put right too");
         expect("somemod_jungle".equals(effects.getString("grass_color_modifier").orElse(null)),
             "the server's own copy of the data is not changed");
+    }
+
+    /** Subtlyd's impaling: a mod condition inside the vanilla enchantment's {@code any_of} is left out, the rest stays. */
+    private static void checkEnchantmentTermTrimmed() {
+        ListTag terms = new ListTag();
+        CompoundTag vanillaTerm = new CompoundTag();
+        vanillaTerm.putString("condition", "minecraft:entity_properties");
+        vanillaTerm.putString("entity", "this");
+        terms.add(vanillaTerm);
+        CompoundTag modTerm = new CompoundTag();
+        modTerm.putString("condition", "subtlyd:is_wet");
+        terms.add(modTerm);
+
+        CompoundTag requirements = new CompoundTag();
+        requirements.putString("condition", "minecraft:any_of");
+        requirements.put("terms", terms);
+
+        CompoundTag effectBody = new CompoundTag();
+        effectBody.putString("type", "minecraft:add");
+
+        CompoundTag effect = new CompoundTag();
+        effect.put("effect", effectBody);
+        effect.put("requirements", requirements);
+
+        ListTag damage = new ListTag();
+        damage.add(effect);
+
+        CompoundTag effects = new CompoundTag();
+        effects.put("minecraft:damage", damage);
+
+        CompoundTag enchantment = new CompoundTag();
+        enchantment.putInt("anvil_cost", 4);
+        enchantment.putString("supported_items", "#minecraft:enchantable/trident");
+        enchantment.put("effects", effects);
+
+        CompoundTag readable = (CompoundTag) only(Registries.ENCHANTMENT, id("minecraft", "impaling"), enchantment);
+        CompoundTag readableRequirements = readable.getCompound("effects").orElseThrow()
+            .getList("minecraft:damage").orElseThrow()
+            .getCompound(0).orElseThrow()
+            .getCompound("requirements").orElseThrow();
+
+        expect("minecraft:any_of".equals(readableRequirements.getString("condition").orElse(null)),
+            "the enchantment itself stays readable");
+        ListTag readableTerms = readableRequirements.getList("terms").orElseThrow();
+        expect(readableTerms.size() == 1, "the mod's condition is left out of the list");
+        expect("minecraft:entity_properties".equals(readableTerms.getCompound(0).orElseThrow().getString("condition").orElse(null)),
+            "the game's own condition stays");
+        expect(readable.getInt("anvil_cost").orElse(0) == 4, "the rest of the enchantment is left alone");
+        expect(terms.size() == 2, "the server's own copy of the data is not changed");
+    }
+
+    /** An enchantment whose every condition is a mod's own is sent without the check at all. */
+    private static void checkEnchantmentGateDropped() {
+        CompoundTag requirements = new CompoundTag();
+        requirements.putString("condition", "subtlyd:is_wet");
+
+        CompoundTag effectBody = new CompoundTag();
+        effectBody.putString("type", "minecraft:add");
+
+        CompoundTag effect = new CompoundTag();
+        effect.put("effect", effectBody);
+        effect.put("requirements", requirements);
+
+        ListTag damage = new ListTag();
+        damage.add(effect);
+
+        CompoundTag effects = new CompoundTag();
+        effects.put("minecraft:damage", damage);
+
+        CompoundTag enchantment = new CompoundTag();
+        enchantment.put("effects", effects);
+
+        CompoundTag readable = (CompoundTag) only(Registries.ENCHANTMENT, id("minecraft", "impaling"), enchantment);
+        CompoundTag readableEffect = readable.getCompound("effects").orElseThrow()
+            .getList("minecraft:damage").orElseThrow()
+            .getCompound(0).orElseThrow();
+
+        expect(readableEffect.get("requirements") == null,
+            "a check no client of theirs can read is left out");
+        expect("minecraft:add".equals(readableEffect.getCompound("effect").orElseThrow().getString("type").orElse(null)),
+            "the effect itself is still there");
+    }
+
+    /** An effect the client cannot read at all is left out, however it is keyed. */
+    private static void checkEnchantmentEffectDropped() {
+        CompoundTag effectBody = new CompoundTag();
+        effectBody.putString("type", "subtlyd:hug");
+
+        CompoundTag effect = new CompoundTag();
+        effect.put("effect", effectBody);
+
+        ListTag damage = new ListTag();
+        damage.add(effect);
+
+        CompoundTag effects = new CompoundTag();
+        effects.put("minecraft:damage", damage);
+
+        CompoundTag enchantment = new CompoundTag();
+        enchantment.put("effects", effects);
+
+        CompoundTag readable = (CompoundTag) only(Registries.ENCHANTMENT, id("minecraft", "impaling"), enchantment);
+
+        expect(!readable.getCompound("effects").orElseThrow().keySet().contains("minecraft:damage"),
+            "an effect only the mod can read is left out");
+    }
+
+    /** Sharper still: a vanilla enchantment with nothing wrong with it is not copied at all. */
+    private static void checkEnchantmentVanillaUntouched() {
+        ListTag terms = new ListTag();
+        CompoundTag vanillaTerm = new CompoundTag();
+        vanillaTerm.putString("condition", "minecraft:entity_properties");
+        terms.add(vanillaTerm);
+
+        CompoundTag requirements = new CompoundTag();
+        requirements.putString("condition", "minecraft:any_of");
+        requirements.put("terms", terms);
+
+        CompoundTag effectBody = new CompoundTag();
+        effectBody.putString("type", "minecraft:add");
+
+        CompoundTag effect = new CompoundTag();
+        effect.put("effect", effectBody);
+        effect.put("requirements", requirements);
+
+        ListTag damage = new ListTag();
+        damage.add(effect);
+
+        CompoundTag effects = new CompoundTag();
+        effects.put("minecraft:damage", damage);
+
+        CompoundTag enchantment = new CompoundTag();
+        enchantment.putInt("anvil_cost", 4);
+        enchantment.put("effects", effects);
+
+        List<RegistrySynchronization.PackedRegistryEntry> entries = List.of(
+            new RegistrySynchronization.PackedRegistryEntry(id("minecraft", "sharpness"), Optional.of(enchantment)));
+        List<RegistrySynchronization.PackedRegistryEntry> readable =
+            ReadableRegistryData.readable(Registries.ENCHANTMENT, null, entries);
+
+        expect(readable == entries, "an enchantment that needs nothing doing to it is handed straight back");
     }
 
     private static Tag only(net.minecraft.resources.ResourceKey<? extends net.minecraft.core.Registry<?>> registry, Identifier id, CompoundTag data) {
