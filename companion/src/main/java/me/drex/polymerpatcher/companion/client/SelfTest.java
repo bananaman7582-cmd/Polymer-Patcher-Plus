@@ -34,6 +34,7 @@ final class SelfTest {
     private static int resumeAt;
     private static int shift;
     private static boolean reportedScreen;
+    private static int shotAt = -1;
 
     /** Stands in for a payload of a mod this client does not really have; never actually received. */
     private record FakePayload(net.minecraft.network.protocol.common.custom.CustomPacketPayload.Type<FakePayload> type) implements net.minecraft.network.protocol.common.custom.CustomPacketPayload {
@@ -85,7 +86,18 @@ final class SelfTest {
             if (ticks < 0 || client.player == null || client.level == null) {
                 return;
             }
+            // Nobody is there to press the button, and a test player standing in the death screen sees nothing
+            if (client.player.isDeadOrDying() && ticks % 40 == 0) {
+                CompanionMod.LOGGER.info("selftest: died, respawning");
+                client.player.respawn();
+            }
             ticks++;
+            if (ticks == shotAt) {
+                Screenshot.grab(client, false);
+                if (client.gui.hud.isHidden()) {
+                    client.gui.hud.toggle();
+                }
+            }
             // The first command on its own and early, so it can be the one that lets the rest through
             if (ticks == 200 && commands.length > 0) {
                 client.player.connection.sendCommand(commands[0].trim());
@@ -98,7 +110,73 @@ final class SelfTest {
                 while (next < commands.length && ticks >= resumeAt) {
                     String command = commands[next++].trim();
                     if (command.equals("screenshot")) {
-                        Screenshot.grab(client, false);
+                        // A few frames later, with the HUD hidden, so the shot is of the world and nothing on top
+                        if (!client.gui.hud.isHidden()) {
+                            client.gui.hud.toggle();
+                        }
+                        shotAt = ticks + 5;
+                    } else if (command.equals("hotbar")) {
+                        for (int slot = 0; slot < 9; slot++) {
+                            var stack = client.player.getInventory().getItem(slot);
+                            if (!stack.isEmpty()) {
+                                CompanionMod.LOGGER.info("selftest: hotbar {} {} model={}", slot, stack.getHoverName().getString(), stack.get(net.minecraft.core.component.DataComponents.ITEM_MODEL));
+                            }
+                        }
+                    } else if (command.equals("entities")) {
+                        java.util.Map<String, Integer> seen = new java.util.TreeMap<>();
+                        for (var e : client.level.entitiesForRendering()) {
+                            if (e.distanceTo(client.player) > 20) {
+                                continue;
+                            }
+                            String what = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString();
+                            if (e instanceof net.minecraft.world.entity.Display.ItemDisplay display) {
+                                var model = display.getItemStack().get(net.minecraft.core.component.DataComponents.ITEM_MODEL);
+                                what += " " + (model == null ? display.getItemStack().getItem() : model.toString().replaceAll("part_[0-9]+", "part_N"));
+                                if (model != null && model.getPath().contains("flame_construct") && model.getPath().endsWith("part_2")) {
+                                    Object scale = "?", translation = "?";
+                                    try {
+                                        var sf = net.minecraft.world.entity.Display.class.getDeclaredField("DATA_SCALE_ID"); sf.setAccessible(true);
+                                        var tf = net.minecraft.world.entity.Display.class.getDeclaredField("DATA_TRANSLATION_ID"); tf.setAccessible(true);
+                                        scale = display.getEntityData().get((net.minecraft.network.syncher.EntityDataAccessor<?>) sf.get(null));
+                                        translation = display.getEntityData().get((net.minecraft.network.syncher.EntityDataAccessor<?>) tf.get(null));
+                                    } catch (Exception ex) { scale = ex.toString(); }
+                                    CompanionMod.LOGGER.info("selftest: flame part_2 scale={} translation={} viewRange={}", scale, translation, display.getViewRange());
+                                }
+                            }
+                            what += " @" + e.blockPosition().toShortString();
+                            seen.merge(what.replaceAll(" @.*", "") + " near " + (e.blockPosition().getX() / 3 * 3) + "," + (e.blockPosition().getZ() / 3 * 3), 1, Integer::sum);
+                        }
+                        seen.forEach((k, v) -> CompanionMod.LOGGER.info("selftest: entity {} x{}", k, v));
+                    } else if (command.equals("hudshot")) {
+                        shotAt = ticks + 5;
+                    } else if (command.startsWith("look ")) {
+                        String[] angles = command.substring(5).trim().split(" ");
+                        client.player.setYRot(Float.parseFloat(angles[0]));
+                        client.player.setXRot(Float.parseFloat(angles[1]));
+                    } else if (command.equals("use")) {
+                        // A right click, aimed by the client's own idea of what is in front of it
+                        var hit = client.hitResult;
+                        if (hit instanceof net.minecraft.world.phys.BlockHitResult block && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+                            CompanionMod.LOGGER.info("selftest: use, the client aims at {} {}, which it sees as {}, holding {}", block.getBlockPos(), block.getDirection(),
+                                client.level.getBlockState(block.getBlockPos()), client.player.getMainHandItem());
+                            client.gameMode.useItemOn(client.player, net.minecraft.world.InteractionHand.MAIN_HAND, block);
+                        } else {
+                            CompanionMod.LOGGER.info("selftest: use, the client aims at nothing");
+                            client.gameMode.useItem(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
+                        }
+                    } else if (command.startsWith("probe")) {
+                        // How the player is moving as their own client sees it, which is all that decides it
+                        var player = client.player;
+                        CompanionMod.LOGGER.info("selftest: {} at {} motion={} speed={} jump={} gravity={} walkingSpeed={} fovModifier={}",
+                            command, String.format("%.3f %.3f %.3f", player.getX(), player.getY(), player.getZ()), player.getDeltaMovement(),
+                            player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED),
+                            player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.JUMP_STRENGTH),
+                            player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.GRAVITY),
+                            player.getAbilities().getWalkingSpeed(), player.getFieldOfViewModifier(true, 1.0F));
+                        CompanionMod.LOGGER.info("selftest: {} holding {}; aiming at {}", command, player.getMainHandItem(),
+                            client.hitResult instanceof net.minecraft.world.phys.BlockHitResult aimed ? client.level.getBlockState(aimed.getBlockPos()) : "nothing");
+                        CompanionMod.LOGGER.info("selftest: {} client sees {} with fluid {} (inWater={} onClimbable={})", command,
+                            client.level.getBlockState(player.blockPosition()), client.level.getFluidState(player.blockPosition()), player.isInWater(), player.onClimbable());
                     } else if (command.startsWith("wait ")) {
                         int wait = Integer.parseInt(command.substring(5).trim());
                         resumeAt = ticks + wait;

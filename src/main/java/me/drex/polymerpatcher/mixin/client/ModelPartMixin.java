@@ -42,7 +42,7 @@ public abstract class ModelPartMixin implements IModelPart {
     public void serverSideRender(PoseStack poseStack, VertexConsumer vertexConsumer, int i, int j, int k, CallbackInfo ci) {
         CubeConsumer cubeConsumer = CubeConsumer.CONSUMER.get();
         if (cubeConsumer == null || this.cubes.isEmpty()) return;
-        cubeConsumer.consume((ModelPart) (Object) this, poseStack.last().pose(), this.skipDraw);
+        cubeConsumer.consume((ModelPart) (Object) this, poseStack.last().pose(), this.skipDraw, vertexConsumer, j);
     }
 
     @Override

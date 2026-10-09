@@ -49,7 +49,10 @@ public final class CarrierPools {
         widened = true;
 
         try {
+            // Twins first, so the cherry leaves below - which drop pink petals under whatever they carry -
+            // stay the last see-through carriers handed out
             int before = poolSize(BlockModelType.LEAVES) + poolSize(BlockModelType.LEAVES_WATERLOGGED);
+            CarrierTwins.addTo(DefaultModelData.USABLE_STATES, DefaultModelData.SPECIAL_REMAPS);
             addLeaves(Blocks.CHERRY_LEAVES);
             int after = poolSize(BlockModelType.LEAVES) + poolSize(BlockModelType.LEAVES_WATERLOGGED);
 
@@ -67,7 +70,7 @@ public final class CarrierPools {
             int live = eu.pb4.polymer.blocks.api.PolymerBlockResourceUtils.getBlocksLeft(BlockModelType.LEAVES)
                 + eu.pb4.polymer.blocks.api.PolymerBlockResourceUtils.getBlocksLeft(BlockModelType.LEAVES_WATERLOGGED);
 
-            PolymerPatcher.LOGGER.info("See-through full-cube carriers: {} offered by Polymer, {} after adding cherry leaves, {} actually available",
+            PolymerPatcher.LOGGER.info("See-through full-cube carriers: {} offered by Polymer, {} after adding twins and cherry leaves, {} actually available",
                 before, after, live);
         } catch (Throwable e) {
             PolymerPatcher.LOGGER.warn("Could not add to Polymer's carrier pools; the ones it ships with are used as they are", e);

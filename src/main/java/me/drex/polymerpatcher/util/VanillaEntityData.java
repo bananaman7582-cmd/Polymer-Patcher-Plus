@@ -309,11 +309,52 @@ public final class VanillaEntityData {
      */
     private static int @Nullable [] shiftForEntityLevel(@Nullable ServerPlayer player) {
         Set<String> adders = TrackedDataMods.modsAddingTo(Entity.class);
-        if (!adders.isEmpty() && NativeClients.shiftingModsOf(player).containsAll(adders)) {
+        Set<String> has = NativeClients.shiftingModsOf(player);
+        if (!adders.isEmpty() && has.containsAll(adders)) {
             // They number entities the way this server does; there is nothing to put back
             return null;
         }
+        if (!adders.isEmpty() && !java.util.Collections.disjoint(adders, has)) {
+            // Some of the mods that add to Entity and not others: only the others' fields come out
+            Set<String> kept = new java.util.HashSet<>(adders);
+            kept.retainAll(has);
+            int[] partial = PARTIAL_ENTITY_SHIFTS.computeIfAbsent(Set.copyOf(kept),
+                k -> java.util.Optional.ofNullable(entityLevelShiftKeeping(k))).orElse(null);
+            if (partial != null) {
+                return partial;
+            }
+        }
         return entityLevelShiftMap();
+    }
+
+    private static final Map<Set<String>, java.util.Optional<int[]>> PARTIAL_ENTITY_SHIFTS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** The Entity-level correction for a client that has these of the mods adding to Entity, or null if unsure. */
+    private static int @Nullable [] entityLevelShiftKeeping(Set<String> kept) {
+        try {
+            int vanillaCount = vanillaFieldCount(Entity.class);
+            int allocated = allocatedCount(Entity.class);
+            if (vanillaCount < 0 || vanillaCount == Integer.MAX_VALUE || allocated < 0) {
+                return null;
+            }
+            Set<Integer> dropped = droppedFor(Entity.class, kept, vanillaCount, 0, allocated);
+            if (dropped == null) {
+                return null;
+            }
+            int[] map = new int[MAX_DATA_ID + 1];
+            int removed = 0;
+            for (int id = 0; id <= MAX_DATA_ID; id++) {
+                if (dropped.contains(id)) {
+                    map[id] = -1;
+                    removed++;
+                } else {
+                    map[id] = id - removed;
+                }
+            }
+            return map;
+        } catch (Throwable e) {
+            return null;
+        }
     }
 
     private static volatile int @Nullable [] universal;
@@ -725,6 +766,78 @@ public final class VanillaEntityData {
         return INDEX_MAPS.computeIfAbsent(new Layout(entityClass, clientHas), VanillaEntityData::buildIndexMap);
     }
 
+    /**
+     * The numbers this class handed to mods the client does not have, or null if they cannot be told apart
+     * for certain - every mod's fields found, every one inside this class, and every number accounted for.
+     */
+    private static @org.jspecify.annotations.Nullable Set<Integer> droppedFor(Class<?> type, Set<String> clientHas,
+                                                                             int vanillaCount, int firstId, int serverCount) {
+        Map<String, List<Integer>> byMod = TrackedDataMods.idsAddedTo(type);
+        if (byMod.isEmpty()) {
+            return unsure(type, "no mod's fields were found", byMod);
+        }
+        int from = firstId + vanillaCount;
+        int to = firstId + serverCount;
+
+        // Every number that could be read back, and the one mod - if any - whose numbers could not be
+        Set<Integer> known = new java.util.HashSet<>();
+        Map<String, Set<Integer>> owned = new HashMap<>();
+        String unread = null;
+        int unreadCount = 0;
+        for (Map.Entry<String, List<Integer>> mod : byMod.entrySet()) {
+            Set<Integer> mine = owned.computeIfAbsent(mod.getKey(), k -> new java.util.HashSet<>());
+            for (int id : mod.getValue()) {
+                if (id < 0) {
+                    if (unread != null && !unread.equals(mod.getKey())) {
+                        return unsure(type, "more than one mod keeps its numbers where they cannot be read back", byMod);
+                    }
+                    unread = mod.getKey();
+                    unreadCount++;
+                    continue;
+                }
+                if (id < from || id >= to || !known.add(id)) {
+                    return unsure(type, "number " + id + " is not one of those mods were given, " + from + " to " + (to - 1), byMod);
+                }
+                mine.add(id);
+            }
+        }
+
+        // What is left of the class's numbers is the unread mod's, as long as it is exactly as many as it asked for
+        Set<Integer> rest = new java.util.HashSet<>();
+        for (int id = from; id < to; id++) {
+            if (!known.contains(id)) {
+                rest.add(id);
+            }
+        }
+        if (unread != null) {
+            if (rest.size() != unreadCount) {
+                return unsure(type, rest.size() + " numbers unaccounted for, but " + unread + " asked for " + unreadCount, byMod);
+            }
+            owned.get(unread).addAll(rest);
+        } else if (!rest.isEmpty()) {
+            return unsure(type, rest.size() + " numbers belong to no mod that was found", byMod);
+        }
+
+        Set<Integer> dropped = new java.util.HashSet<>();
+        owned.forEach((mod, ids) -> {
+            if (!clientHas.contains(mod)) {
+                dropped.addAll(ids);
+            }
+        });
+        return dropped;
+    }
+
+    private static final Set<Class<?>> UNSURE_REPORTED = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** Says once, for a class, why its fields could not be split between the mods that added them. */
+    private static @org.jspecify.annotations.Nullable Set<Integer> unsure(Class<?> type, String why, Map<String, List<Integer>> found) {
+        if (UNSURE_REPORTED.add(type)) {
+            PolymerPatcher.LOGGER.warn("Could not tell which of {}'s fields belong to which mod ({}; found {}), so a player with some "
+                + "of the mods adding to it and not others may be disconnected", type.getSimpleName(), why, found);
+        }
+        return null;
+    }
+
     private static int[] buildIndexMap(Layout layout) {
         // Superclass first, because that is the order the numbers were handed out in
         Deque<Class<?>> chain = new ArrayDeque<>();
@@ -780,6 +893,20 @@ public final class VanillaEntityData {
             boolean keepExtras = !adders.isEmpty() && layout.clientHas().containsAll(adders);
             int keep = keepExtras ? serverCount : Math.min(vanillaCount, serverCount);
 
+            // A client with some of these mods and not others. Keeping every mod's fields or none of them
+            // was wrong both ways: Yazz's Dungeons and Alex's Caves both add to Entity, and a player with only
+            // Alex's Caves had its four taken away along with the one they lacked - every field after them
+            // landed four numbers early, and a squid's flags arrived where the client keeps a count. Each
+            // mod's own numbers, read back out of the fields it keeps them in, are kept or dropped by
+            // themselves instead
+            Set<Integer> dropped = null;
+            if (!keepExtras && !adders.isEmpty() && !java.util.Collections.disjoint(adders, layout.clientHas())) {
+                dropped = droppedFor(type, layout.clientHas(), vanillaCount, serverNextId, serverCount);
+                if (dropped != null) {
+                    keep = serverCount - dropped.size();
+                }
+            }
+
             // TEMPORARY DIAGNOSTIC - remove once the numbering is understood
             PolymerPatcher.LOGGER.debug("{} of {}: vanilla={} allocated={} inherited={} serverCount={} keep={} adders={} declaredIds={} serverIds={}..{} -> clientIds={}..{}",
                 type.getSimpleName(), layout.entityClass().getSimpleName(),
@@ -791,19 +918,21 @@ public final class VanillaEntityData {
             // before it is sent rather than after it has ended the connection
             List<String> serializers = vanillaSerializerNames(type);
 
+            int kept = 0;
             for (int i = 0; i < serverCount; i++) {
                 int serverId = serverNextId + i;
                 highest = Math.max(highest, serverId);
-                if (i >= keep) {
+                if (dropped != null ? dropped.contains(serverId) : i >= keep) {
                     // A field this client has nowhere to put; anything carrying its number is dropped
                     shifted = true;
                     continue;
                 }
-                int clientId = clientNextId + i;
+                int clientId = clientNextId + kept;
                 mapped.put(serverId, clientId);
-                if (i < serializers.size() && !serializers.get(i).isEmpty()) {
-                    expects.put(clientId, serializers.get(i));
+                if (kept < serializers.size() && !serializers.get(kept).isEmpty()) {
+                    expects.put(clientId, serializers.get(kept));
                 }
+                kept++;
                 shifted |= serverId != clientId;
             }
 

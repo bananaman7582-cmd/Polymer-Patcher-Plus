@@ -102,6 +102,7 @@ public final class TrackedDataMods {
      * Says whether the mod contains a mixin that defines tracked data.
      */
     private static boolean addsTrackedData(ModContainer container) throws Exception {
+        boolean found = false;
         for (String config : mixinConfigs(container)) {
             Optional<Path> path = container.findPath(config);
             if (path.isEmpty()) {
@@ -114,15 +115,15 @@ public final class TrackedDataMods {
             }
 
             String pkg = json.get("package").getAsString().replace('.', '/');
+            // Every mixin, not just until the first: which numbers belong to which mod is worked out from
+            // the fields each one fills, and a mod that adds to two classes has to be found in both
             for (String key : List.of("mixins", "client", "server")) {
                 for (String mixin : strings(json, key)) {
-                    if (definesTrackedData(container, pkg + "/" + mixin.replace('.', '/') + ".class")) {
-                        return true;
-                    }
+                    found |= definesTrackedData(container, pkg + "/" + mixin.replace('.', '/') + ".class");
                 }
             }
         }
-        return false;
+        return found;
     }
 
     /** The mixin config files the mod declares, read out of its own fabric.mod.json. */
@@ -178,12 +179,32 @@ public final class TrackedDataMods {
             ClassNode node = new ClassNode();
             new ClassReader(Files.readAllBytes(path.get())).accept(node, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 
+            boolean defines = false;
+            Set<String> mixinTargets = null;
             for (MethodNode method : node.methods) {
                 for (var instruction : method.instructions) {
                     if (instruction instanceof MethodInsnNode call
                         && call.getOpcode() == Opcodes.INVOKESTATIC
                         && call.name.equals(DEFINE_ID)
                         && call.owner.endsWith(SYNCHED_ENTITY_DATA)) {
+                        if (mixinTargets == null) {
+                            mixinTargets = targetsOf(node);
+                        }
+                        // Where the number it hands out is kept, so it can be read back once the game has
+                        // handed it out: a field of the mixin itself, which ends up on the class it targets,
+                        // or one in a holder class of the mod's own
+                        FieldRef kept = storedIn(call, node.name);
+                        String mod = container.getMetadata().getId();
+                        synchronized (MODS_BY_TARGET) {
+                            for (String target : mixinTargets) {
+                                FIELDS_BY_TARGET.computeIfAbsent(target, key -> new HashMap<>())
+                                    .computeIfAbsent(mod, key -> new ArrayList<>()).add(kept);
+                            }
+                        }
+                        if (defines) {
+                            continue;
+                        }
+                        defines = true;
                         // Which class it adds them to matters as much as that it adds them at all. A
                         // client carrying some of these mods but not others needs the fields it does
                         // have kept and only the ones it lacks taken away, and that can only be
@@ -197,14 +218,74 @@ public final class TrackedDataMods {
                         }
                         PolymerPatcher.LOGGER.info("{} adds tracked data in {}, to {}, so entity fields are numbered differently wherever it is installed",
                             container.getMetadata().getId(), classFile, targets);
-                        return true;
                     }
                 }
             }
+            return defines;
         } catch (Throwable e) {
             PolymerPatcher.LOGGER.debug("Could not read {}", classFile, e);
         }
         return false;
+    }
+
+    /** A static field one {@code defineId} result is stored in; {@code merged} when it is the mixin's own. */
+    private record FieldRef(@Nullable String owner, @Nullable String name, boolean merged) {
+    }
+
+    /** Which mod's numbers are kept in which fields, by the class they are added to and then by mod. */
+    private static final Map<String, Map<String, List<FieldRef>>> FIELDS_BY_TARGET = new HashMap<>();
+
+    /** The static field the result of this call is put in, or an unknown one if it is kept some other way. */
+    private static FieldRef storedIn(MethodInsnNode call, String mixinName) {
+        for (var next = call.getNext(); next != null; next = next.getNext()) {
+            if (next instanceof org.objectweb.asm.tree.FieldInsnNode field && field.getOpcode() == Opcodes.PUTSTATIC) {
+                return new FieldRef(field.owner, field.name, field.owner.equals(mixinName));
+            }
+            // Labels, line numbers and casts sit between a call and where its result goes; anything else
+            // means it went somewhere a field cannot be read back from
+            if (next.getOpcode() >= 0 && next.getOpcode() != Opcodes.CHECKCAST) {
+                break;
+            }
+        }
+        return new FieldRef(null, null, false);
+    }
+
+    /**
+     * The numbers each mod adding tracked data to this class was handed, by mod, one entry per number, read
+     * back out of the fields the mods keep them in. A number that is not kept in a field anyone can read -
+     * Alex's Caves hands all four of its straight to a method of its own - is there as {@code -1}, so that
+     * how many a mod was given is still known even where which ones is not.
+     */
+    public static Map<String, List<Integer>> idsAddedTo(Class<?> type) {
+        Map<String, List<FieldRef>> byMod;
+        synchronized (MODS_BY_TARGET) {
+            byMod = FIELDS_BY_TARGET.get(type.getName().replace('.', '/'));
+            byMod = byMod == null ? Map.of() : Map.copyOf(byMod);
+        }
+        Map<String, List<Integer>> ids = new HashMap<>();
+        for (Map.Entry<String, List<FieldRef>> entry : byMod.entrySet()) {
+            List<Integer> mine = new ArrayList<>();
+            for (FieldRef ref : entry.getValue()) {
+                Integer id = read(type, ref);
+                mine.add(id == null ? -1 : id);
+            }
+            ids.put(entry.getKey(), mine);
+        }
+        return ids;
+    }
+
+    private static @Nullable Integer read(Class<?> target, FieldRef ref) {
+        if (ref.owner() == null || ref.name() == null) {
+            return null;
+        }
+        try {
+            Class<?> owner = ref.merged() ? target : Class.forName(ref.owner().replace('/', '.'), true, target.getClassLoader());
+            java.lang.reflect.Field field = owner.getDeclaredField(ref.name());
+            field.setAccessible(true);
+            return field.get(null) instanceof net.minecraft.network.syncher.EntityDataAccessor<?> accessor ? accessor.id() : null;
+        } catch (Throwable e) {
+            return null;
+        }
     }
     /** Which mods add tracked data to which class, by the class's internal name. */
     private static final Map<String, Set<String>> MODS_BY_TARGET = new HashMap<>();

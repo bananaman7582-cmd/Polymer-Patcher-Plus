@@ -14,6 +14,7 @@
 	},
 	"mixins": [
 		"block.TorchBlockAccessor",
+		"block.HiddenShapeClickMixin",
 		"block.CompanionBreakSoundMixin",
 		"block.ServerLevelCompanionSoundMixin",
 		"polymer.CoreBridgeMixin",
@@ -42,6 +43,8 @@
 		"entity.EntityVisibilityMixin",
 		"entity.ArrowPickupSaveMixin",
 		"entity.EntityPushMixin",
+		"entity.StuckInBlockMixin",
+		"entity.ServerPlayerHoldMixin",
 		"entity.LivingEntityMixin",
 		"factorytools.VirtualDestroyStageMixin",
 		"polymer.light.ChunkHolderMixin",

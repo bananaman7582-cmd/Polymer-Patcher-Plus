@@ -569,6 +569,12 @@ public record AutomaticFactoryBlock(
         boolean collisionEmpty, boolean waterLogged
     ) {
         CollisionModelMatch collisionMatch = findClosestBlockModelTypes(collisionKey);
+        double polymerDistance = collisionMatch == null ? Double.POSITIVE_INFINITY : collisionMatch.distance();
+        // One of this mod's own kinds, where its shape fits better than anything Polymer has - see ExtraCarriers
+        BlockState own = ownCarrier(originalState, parsedVariants, collisionKey, waterLogged, polymerDistance, false);
+        if (own != null) {
+            return own;
+        }
         if (collisionMatch != null) {
             Set<BlockModelType> blockModelTypeCandidates = collisionMatch.candidates();
             for (var parsedVariant : parsedVariants) {
@@ -605,6 +611,11 @@ public record AutomaticFactoryBlock(
                         firstChoice = false;
                     }
                 }
+            }
+            // Or one that fits as well, now that what Polymer has for this shape has run out
+            own = ownCarrier(originalState, parsedVariants, collisionKey, waterLogged, polymerDistance, true);
+            if (own != null) {
+                return own;
             }
             // Slabs and collision-free decoration are the two shapes most often repeated by the thousand
             // in terrain. Once their small model-bearing carrier pools are spent, one display per block is
@@ -660,6 +671,22 @@ public record AutomaticFactoryBlock(
     /** Spend and discard server-only additions until the carrier library returns a real client state. */
     /** States drawn by a display only because the carriers ran out, which are drawn nearer; see above. */
     private static final Set<BlockState> SHORT_SIGHTED = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** A carrier from one of this mod's own kinds for this state's look, if one suits its shape. */
+    @Nullable
+    private static BlockState ownCarrier(BlockState originalState, List<Pair<BlockStatePredicate, List<StateModelVariant>>> parsedVariants,
+                                         ShapeKey collisionKey, boolean waterLogged, double polymerDistance, boolean orEqual) {
+        for (var parsedVariant : parsedVariants) {
+            if (parsedVariant.getFirst().test(originalState)) {
+                PolymerBlockModel[] models = parsedVariant.getSecond().stream()
+                    .map(x -> new PolymerBlockModel(x.model(), x.x(), x.y(), x.uvlock(), x.weigth()))
+                    .toArray(PolymerBlockModel[]::new);
+                return ExtraCarriers.request(collisionKey, waterLogged, polymerDistance, orEqual,
+                    List.of(parsedVariant.getSecond(), waterLogged), models);
+            }
+        }
+        return null;
+    }
 
     @Nullable
     private static BlockState requestReadableBlock(BlockModelType type, PolymerBlockModel[] models) {

@@ -53,7 +53,8 @@ public class ResourceHelper {
                     return;
                 }
 
-                packBuilder.addData("assets/" + id.getNamespace() + "/" + id.getPath(), data);
+                // An item file choosing by a potion only the server knows is thrown away whole by every client
+                packBuilder.addData("assets/" + id.getNamespace() + "/" + id.getPath(), ModdedPotionModels.clean(id, data, packBuilder));
             } catch (IOException e) {
                 PolymerPatcher.LOGGER.error("Failed to read resource {}: {}", id, e);
             }

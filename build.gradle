@@ -101,6 +101,9 @@ sourceSets {
     }
 }
 sourceSets.main.resources.srcDir(vanillaStateMapOutputDir)
+// Every vanilla state a client cannot tell apart from another: free carriers, read by CarrierPools
+def carrierTwinsOutputDir = layout.buildDirectory.dir("generated/carrier-twins")
+sourceSets.main.resources.srcDir(carrierTwinsOutputDir)
 // The manifest and handshake the companion client mod shares word for word with this server
 sourceSets.main.java.srcDir "companion-shared/src/main/java"
 
@@ -109,6 +112,15 @@ tasks.register("generateVanillaBlockStateMap", JavaExec) {
     classpath = sourceSets.stateMapGenerator.runtimeClasspath
     mainClass = "me.drex.polymerpatcher.build.VanillaBlockStateMapGenerator"
     def outputFile = vanillaStateMapOutputDir.map { it.file("assets/polymer-patcher/vanilla_block_states_26_2.tsv") }
+    args outputFile.get().asFile.absolutePath
+    outputs.file(outputFile)
+}
+
+tasks.register("generateCarrierTwins", JavaExec) {
+    dependsOn tasks.named("compileStateMapGeneratorJava")
+    classpath = sourceSets.stateMapGenerator.runtimeClasspath
+    mainClass = "me.drex.polymerpatcher.build.CarrierTwinFinder"
+    def outputFile = carrierTwinsOutputDir.map { it.file("assets/polymer-patcher/carrier_twins_26_2.tsv") }
     args outputFile.get().asFile.absolutePath
     outputs.file(outputFile)
 }
@@ -143,6 +155,7 @@ tasks.register("bumpVersion") {
 
 tasks.named("processResources") {
 	dependsOn tasks.named("generateVanillaBlockStateMap")
+	dependsOn tasks.named("generateCarrierTwins")
 	mustRunAfter "bumpVersion"
 	// bumpVersion changes the value after Gradle's up-to-date snapshot has been made. Always expand
 	// fabric.mod.json again so the version announced by the running mod matches the jar filename.

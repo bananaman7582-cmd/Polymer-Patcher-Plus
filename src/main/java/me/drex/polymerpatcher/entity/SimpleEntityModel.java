@@ -327,7 +327,19 @@ public class SimpleEntityModel<Entity extends net.minecraft.world.entity.Entity,
         ServerSubmitNodeCollector<Entity, RenderState, Model> nodeCollector = new ServerSubmitNodeCollector<>(this);
         activeElementIndex = 0;
 
-        renderer.submit(renderState, poseStack, nodeCollector, DEFAULT_CAMERA_STATE);
+        // Parts a renderer draws into a buffer by hand are caught on the way, and drawn once that buffer
+        // is handed over - see ServerSubmitNodeCollector#submitCustomGeometry
+        me.drex.polymerpatcher.client.rendering.CubeConsumer previous = me.drex.polymerpatcher.client.rendering.CubeConsumer.CONSUMER.get();
+        me.drex.polymerpatcher.client.rendering.CubeConsumer.CONSUMER.set(nodeCollector.handDrawn());
+        try {
+            renderer.submit(renderState, poseStack, nodeCollector, DEFAULT_CAMERA_STATE);
+        } finally {
+            if (previous == null) {
+                me.drex.polymerpatcher.client.rendering.CubeConsumer.CONSUMER.remove();
+            } else {
+                me.drex.polymerpatcher.client.rendering.CubeConsumer.CONSUMER.set(previous);
+            }
+        }
     }
 
     public void updateModelPart(ModelPart part, Matrix4f matrix4f, int overlayCoords, Identifier texture, boolean translucent, boolean hidden) {

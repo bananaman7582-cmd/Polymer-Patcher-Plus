@@ -163,7 +163,55 @@ public class ServerSubmitNodeCollector<Entity extends net.minecraft.world.entity
     public void submitCustomGeometry(PoseStack poseStack, RenderType renderType, CustomGeometryRenderer customGeometryRenderer) {
         // Where a Citadel model's finished vertices arrive, already flattened out of their parts.
         // Nothing can be recovered from them, which is why CitadelEntityModel walks the model itself
-        // rather than waiting for it to be submitted
+        // rather than waiting for it to be submitted.
+        //
+        // A renderer written the old way does the same with ordinary model parts: draws them into a
+        // buffer of its own, then hands the buffer over here. Yazz's Dungeons draws every one of its mobs
+        // like that, and every one of them was invisible. The parts were seen being drawn - into this very
+        // buffer - and only now is it known what they are drawn with, so this is where they are taken
+        java.util.List<HandDrawnPart> parts = drawnInto.remove(customGeometryRenderer);
+        if (parts == null || quiet) {
+            return;
+        }
+        RenderSetup renderSetup = ((RenderTypeAccessor) renderType).getState();
+        Map<String, RenderSetup.TextureBinding> textures = ((RenderSetupAccessor) (Object) renderSetup).polymer_patcher$textures();
+        Identifier texture = RenderSetups.mainTexture(textures);
+        if (texture == null) {
+            return;
+        }
+        boolean translucent = RenderSetups.isTranslucent(((RenderSetupAccessor) (Object) renderSetup).polymer_patcher$pipeline());
+        for (HandDrawnPart part : parts) {
+            entityModel.updateModelPart(part.part(), part.matrix(), part.overlayCoords(), texture, translucent, part.hidden());
+        }
+    }
+
+    /** A model part drawn by hand, and where: kept until its buffer is submitted and says what it is drawn with. */
+    private record HandDrawnPart(ModelPart part, org.joml.Matrix4f matrix, boolean hidden, int overlayCoords) {
+    }
+
+    private final Map<Object, java.util.List<HandDrawnPart>> drawnInto = new java.util.IdentityHashMap<>();
+
+    /**
+     * Watches a whole renderer's pass for model parts drawn straight into a buffer rather than handed over.
+     * Set around the pass by the entity model; a part drawn through {@link #submitModel} is not seen here,
+     * since that sets a watcher of its own for the length of the drawing.
+     */
+    public me.drex.polymerpatcher.client.rendering.CubeConsumer handDrawn() {
+        return new me.drex.polymerpatcher.client.rendering.CubeConsumer() {
+            @Override
+            public void consume(ModelPart part, org.joml.Matrix4f matrix4f, boolean hidden) {
+                // Nothing to file it under without the buffer it went into
+            }
+
+            @Override
+            public void consume(ModelPart part, org.joml.Matrix4f matrix4f, boolean hidden, com.mojang.blaze3d.vertex.VertexConsumer buffer, int overlayCoords) {
+                if (quiet || buffer == null) {
+                    return;
+                }
+                drawnInto.computeIfAbsent(buffer, key -> new java.util.ArrayList<>())
+                    .add(new HandDrawnPart(part, new org.joml.Matrix4f(matrix4f), hidden, overlayCoords));
+            }
+        };
     }
 
     @Override

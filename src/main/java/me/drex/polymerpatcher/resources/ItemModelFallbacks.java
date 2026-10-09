@@ -1,20 +1,28 @@
 package me.drex.polymerpatcher.resources;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import eu.pb4.polymer.core.api.item.PolymerItemUtils;
 import me.drex.polymerpatcher.PolymerPatcher;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.IoSupplier;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomModelData;
 import org.jspecify.annotations.Nullable;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Predicate;
 
 /**
  * Keeps a readable stand-in for a mod's item definition under a separate identifier.
@@ -128,6 +136,20 @@ public final class ItemModelFallbacks {
         if (element == null || element.isJsonNull()) {
             return null;
         }
+        if (element.isJsonArray()) {
+            // The cases of a switch. Gone through one by one like everything else - left whole, a single
+            // switch on the display context with a mod's question inside one of its cases threw away the
+            // entire definition, and the Wraithlight Lantern fell back on a block model that does not exist
+            JsonArray kept = new JsonArray();
+            for (JsonElement child : element.getAsJsonArray()) {
+                JsonElement readable = withoutModCode(child);
+                if (readable == null && needsModCode(child)) {
+                    return null;
+                }
+                kept.add(readable == null ? child : readable);
+            }
+            return kept;
+        }
         if (!element.isJsonObject()) {
             return needsModCode(element) ? null : element;
         }
@@ -136,6 +158,11 @@ public final class ItemModelFallbacks {
         if (isMods(object.get("type"))) {
             // Drawn by the mod itself. There is nothing underneath to keep
             return null;
+        }
+
+        JsonObject bridged = bridged(object);
+        if (bridged != null) {
+            return bridged;
         }
 
         if (isMods(object.get("property"))) {
@@ -154,6 +181,82 @@ public final class ItemModelFallbacks {
             kept.add(entry.getKey(), child == null ? entry.getValue() : child);
         }
         return kept;
+    }
+
+    /** Mod-only yes-or-no questions with an answer the server can give, by property, and the flag each answer is sent in. */
+    private static final Map<Identifier, Integer> BRIDGE_FLAGS = new ConcurrentHashMap<>();
+    private static final List<Predicate<ItemStack>> BRIDGE_TESTS = new CopyOnWriteArrayList<>();
+
+    /**
+     * Answers a mod's own item model condition on the server, so a client without its code can still ask it.
+     * <p>
+     * A condition is only a yes-or-no question about the stack, and the stack is right here. So the stand-in
+     * asks a custom model data flag instead, and every stack sent out carries the answer in that flag. A
+     * Wraithlight Lantern with souls in it shows the full lantern again, rather than always the empty one.
+     */
+    public static synchronized void bridgeCondition(Identifier property, Predicate<ItemStack> test) {
+        if (BRIDGE_TESTS.isEmpty()) {
+            PolymerItemUtils.ITEM_MODIFICATION_EVENT.register((original, client, context) -> answerBridges(original, client));
+        }
+        BRIDGE_FLAGS.put(property, BRIDGE_TESTS.size());
+        BRIDGE_TESTS.add(test);
+    }
+
+    /** The same condition asking the flag its answer is sent in, or null where nothing answers it. */
+    private static @Nullable JsonObject bridged(JsonObject object) {
+        JsonElement property = object.get("property");
+        JsonElement type = object.get("type");
+        Identifier typeId = type == null || !type.isJsonPrimitive() ? null : Identifier.tryParse(type.getAsString());
+        if (!isMods(property) || !Identifier.withDefaultNamespace("condition").equals(typeId)) {
+            return null;
+        }
+        Identifier id = Identifier.tryParse(property.getAsString());
+        Integer flag = id == null ? null : BRIDGE_FLAGS.get(id);
+        if (flag == null) {
+            return null;
+        }
+        JsonObject out = new JsonObject();
+        out.addProperty("type", "minecraft:condition");
+        out.addProperty("property", "minecraft:custom_model_data");
+        out.addProperty("index", flag);
+        for (String branch : List.of("on_true", "on_false")) {
+            JsonElement original = object.get(branch);
+            JsonElement readable = withoutModCode(original);
+            if (readable == null) {
+                return null;
+            }
+            out.add(branch, readable);
+        }
+        return out;
+    }
+
+    private static ItemStack answerBridges(ItemStack original, ItemStack client) {
+        List<Boolean> flags = null;
+        for (int i = 0; i < BRIDGE_TESTS.size(); i++) {
+            boolean answer;
+            try {
+                answer = BRIDGE_TESTS.get(i).test(original);
+            } catch (Throwable e) {
+                answer = false;
+            }
+            if (!answer) {
+                // Unset is already false, so a stack that answers no to everything is left alone
+                continue;
+            }
+            if (flags == null) {
+                CustomModelData existing = client.get(DataComponents.CUSTOM_MODEL_DATA);
+                flags = new ArrayList<>(existing == null ? List.of() : existing.flags());
+            }
+            while (flags.size() <= i) {
+                flags.add(false);
+            }
+            flags.set(i, true);
+        }
+        if (flags != null) {
+            CustomModelData existing = client.getOrDefault(DataComponents.CUSTOM_MODEL_DATA, CustomModelData.EMPTY);
+            client.set(DataComponents.CUSTOM_MODEL_DATA, new CustomModelData(existing.floats(), flags, existing.strings(), existing.colors()));
+        }
+        return client;
     }
 
     private static boolean isMods(@Nullable JsonElement value) {
