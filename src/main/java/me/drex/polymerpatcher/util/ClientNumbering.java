@@ -1,6 +1,7 @@
 package me.drex.polymerpatcher.util;
 
 import eu.pb4.polymer.rsm.api.RegistrySyncUtils;
+import eu.pb4.polymer.networking.api.ContextByteBuf;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.objects.Object2IntLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
@@ -10,6 +11,7 @@ import net.fabricmc.fabric.api.networking.v1.context.PacketContext;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.network.Connection;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import org.jspecify.annotations.Nullable;
@@ -29,18 +31,19 @@ import java.util.Set;
  * its data types, which on this server is the number of another type that holds a map, and the server dropped
  * the player trying to read it.
  * <p>
- * Fixing it means both ends using the same numbers, and they cannot simply be this server's: the entries of
- * every mod the client lacks are spread through them, and a numbering with gaps in it is fatal to a 26.2 client
- * (it is what crashed clients in 0.14.309). So a client is given a numbering of its own with no gaps. Every
- * entry this server shares with all clients keeps its number exactly - this server writes those to everybody
- * as they are, and Fabric's own registry sync, which a client is sent before this one, already put them there.
- * The entries of the mods the client has at this server's version fill the numbers left free, lowest first, and
- * every number the client sends is turned back into this server's on the way in. Nothing this server writes
- * needs turning: a client given this numbering is only ever sent shared entries, its mods' items going to it
- * as stand-ins and their data types not at all.
+ * Fixing it means reconstructing the client's gap-free numbering. Every entry this server shares with all
+ * clients keeps its number exactly; entries belonging to mods the client has fill the available numbers in
+ * registry order. Every number the client sends is then turned back into this server's on the way in.
+ *
+ * <p>Item numbering may also be sent to a client when it is safe to hand that client real modded items.
+ * Data-component numbering is deliberately <em>never</em> sent back. Component types occur inside ordinary
+ * server-to-client ItemStacks too, and replacing the client's component registry made Polymer creative-tab
+ * entries unreadable ({@code No value with id 46}). Instead, component numbers are translated in both
+ * directions at the packet codec: client number to server entry while reading, and server entry to client
+ * number while writing. Neither side's actual registry is rewritten.</p>
  * <p>
  * A client handed its mods' real items gets this server's own item numbering instead (see
- * {@link NativeItemSync}), and only the data types are renumbered for it.
+ * {@link NativeItemSync}); its data types are still translated only while reading its packets.
  */
 public final class ClientNumbering {
     /** Why the last attempt to build a numbering gave up, so it is said once rather than per join. */
@@ -196,6 +199,43 @@ public final class ClientNumbering {
             return meant == value ? decoded : numbering.wrap(meant);
         }
         return numbering.translate(decoded);
+    }
+
+    /**
+     * The numeric id this connection's client uses for a server registry entry, or {@code -1} when the
+     * ordinary server id should be written.
+     *
+     * <p>This is intentionally used only for data-component types.  A matched mod's real item may carry one
+     * of its own components, but clients missing other server mods compact that component registry and assign
+     * it another number.  Writing the server number produced the recurring creative-tab {@code id 46} kick.
+     * Writing the reconstructed client number keeps the value's real component codec while putting the id the
+     * receiver actually understands on the wire.</p>
+     */
+    public static int toClientId(RegistryFriendlyByteBuf buf, ResourceKey<?> registryKey, Object value) {
+        // Polymer serializes its own payloads through ContextByteBuf.  That buffer keeps the destination
+        // connection explicitly, while Fabric's thread-scoped PacketContext is not guaranteed to remain
+        // installed inside the nested payload codec.  The creative-tab kick lived on exactly that path, so
+        // prefer the buffer's authoritative connection and retain PacketContext as the vanilla-packet path.
+        Connection connection = buf instanceof ContextByteBuf contextBuf
+            ? contextBuf.clientConnection()
+            : connectionFromPacketContext();
+        if (!(connection instanceof NativeItemConnection known)) {
+            return -1;
+        }
+        ClientNumbering numbering = known.polymerPatcher$numbering(registryKey.identifier());
+        return numbering == null ? -1 : numbering.clientId(value);
+    }
+
+    private static @Nullable Connection connectionFromPacketContext() {
+        PacketContext context = PacketContext.get();
+        return context == null ? null : context.get(PacketContext.CONNECTION);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private int clientId(Object value) {
+        Object unwrapped = value instanceof Holder<?> holder ? holder.value() : value;
+        Identifier key = ((Registry) this.registry).getKey(unwrapped);
+        return key != null && this.clientIds.containsKey(key) ? this.clientIds.getInt(key) : -1;
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

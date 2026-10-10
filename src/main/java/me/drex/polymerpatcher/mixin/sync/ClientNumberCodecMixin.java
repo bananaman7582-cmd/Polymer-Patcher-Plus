@@ -3,6 +3,7 @@ package me.drex.polymerpatcher.mixin.sync;
 import me.drex.polymerpatcher.util.ClientNumbering;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.VarInt;
 import net.minecraft.resources.ResourceKey;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -10,9 +11,11 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Reads an item or item data type a renumbered client sent as the one it meant. See {@link ClientNumbering}.
+ * Translates item data type numbers between this server and a differently modded client. See
+ * {@link ClientNumbering}.
  * <p>
  * The target is the codec behind {@code ByteBufCodecs.registry} and {@code holderRegistry}, which every item
  * and data type number goes through - the one Polymer itself hooks to write registry numbers. Only those two
@@ -36,6 +39,23 @@ public abstract class ClientNumberCodecMixin {
         Object meant = ClientNumbering.fromClient(registry, decoded);
         if (meant != decoded) {
             cir.setReturnValue(meant);
+        }
+    }
+
+    /**
+     * Writes the receiver's number without replacing the value being encoded.  The surrounding component
+     * patch therefore still uses the real component type's stream codec for its value.
+     */
+    @Inject(method = "encode(Lnet/minecraft/network/RegistryFriendlyByteBuf;Ljava/lang/Object;)V", at = @At("HEAD"),
+        cancellable = true, require = 0)
+    private void polymerPatcher$writeClientNumber(RegistryFriendlyByteBuf buf, Object value, CallbackInfo ci) {
+        if (!Registries.DATA_COMPONENT_TYPE.equals(this.val$registryKey)) {
+            return;
+        }
+        int clientId = ClientNumbering.toClientId(buf, this.val$registryKey, value);
+        if (clientId >= 0) {
+            VarInt.write(buf, clientId);
+            ci.cancel();
         }
     }
 }

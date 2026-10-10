@@ -1190,6 +1190,9 @@ public record AutomaticFactoryBlock(
     }
 
     private static boolean isRendererInvisible(BlockState state) {
+        if (BlockPresentationRules.modelled(state)) {
+            return false;
+        }
         try {
             return state.getRenderShape() == RenderShape.INVISIBLE;
         } catch (Throwable ignored) {

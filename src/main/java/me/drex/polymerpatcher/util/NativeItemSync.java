@@ -237,19 +237,23 @@ public final class NativeItemSync {
                 if (items == null) {
                     renumber(state, sync, BuiltInRegistries.ITEM, allSameVersion);
                 }
-                // A mod's data types are also numbered for a client that has the mod at another version. The
+                // A mod's data types are also understood for a client that has the mod at another version. The
                 // channels it lists say which mods it has, and a Fancy Portals wand picked from its own tabs
-                // arrives under the client's number for the wand's data type - a number this server reads as
-                // another type, which drops the player decoding it (the "create_portal" kick). Its mod needs
-                // no version match for that: only the data types are involved, and either one exists at both
-                // ends or neither
+                // arrives under the client's number for the wand's data type - a number this server otherwise
+                // reads as another type, which drops the player decoding it (the "create_portal" kick).
+                //
+                // Do NOT send this compact component numbering back through Fabric registry sync. Component
+                // types are used by every ItemStack the server writes, including Polymer's creative-tab
+                // payload. Replacing the client's registry with the compact numbering left ordinary server
+                // component ids absent there. Keep the map connection-side: the number codec translates it in
+                // both directions without changing either registry.
                 Set<String> componentNamespaces = new TreeSet<>(allSameVersion);
                 addChannelsWithComponentTypes(handler, componentNamespaces);
                 if (componentNamespaces.size() > allSameVersion.size()) {
                     PolymerPatcher.LOGGER.info("{} also has the data types of mods numbered that they have at another version: {}",
                         ownerName(handler), componentNamespaces);
                 }
-                renumber(state, sync, BuiltInRegistries.DATA_COMPONENT_TYPE, componentNamespaces);
+                rememberInboundNumbering(state, BuiltInRegistries.DATA_COMPONENT_TYPE, componentNamespaces);
             }
             return sync.isEmpty() ? null : sync;
         } catch (Throwable e) {
@@ -265,6 +269,22 @@ public final class NativeItemSync {
         ClientNumbering numbering = ClientNumbering.forNamespaces(registry, namespaces);
         if (numbering != null) {
             sync.put(numbering.registryId(), numbering.clientIds());
+            state.polymerPatcher$setNumbering(numbering.registryId(), numbering);
+        }
+    }
+
+    /**
+     * Remembers how a client's private registry is numbered without changing that registry on the client.
+     *
+     * <p>This is required for data component types. They occur in both directions: their client numbers
+     * are translated while reading a creative item, and server numbers are translated while writing a real
+     * item belonging to a mod both sides share. Fabric and Polymer retain the actual registry layouts they
+     * established for each side.</p>
+     */
+    private static void rememberInboundNumbering(NativeItemConnection state, Registry<?> registry,
+                                                  Set<String> namespaces) {
+        ClientNumbering numbering = ClientNumbering.forNamespaces(registry, namespaces);
+        if (numbering != null) {
             state.polymerPatcher$setNumbering(numbering.registryId(), numbering);
         }
     }
@@ -382,7 +402,7 @@ public final class NativeItemSync {
         }
         ClientNumbering types = state.polymerPatcher$numbering(BuiltInRegistries.DATA_COMPONENT_TYPE.key().identifier());
         if (types != null) {
-            parts.add(types.renumbered() + " of their mods' item data types renumbered to match");
+            parts.add(types.renumbered() + " of their mods' item data types translated on input");
         }
         return String.join(", ", parts);
     }

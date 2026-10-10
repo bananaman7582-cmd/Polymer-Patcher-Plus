@@ -45,6 +45,10 @@ public final class YdtwoCompatibility {
             return;
         }
         bridgeLantern();
+        // The block says it is invisible because its renderer draws it; it has a model of its own now
+        Identifier shrieker = Identifier.fromNamespaceAndPath(MOD, "twisted_shrieker");
+        me.drex.polymerpatcher.block.BlockPresentationRules.registerModelled(state ->
+            shrieker.equals(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock())));
         PolymerResourcePackUtils.RESOURCE_PACK_CREATION_EVENT.register(YdtwoCompatibility::writeModels);
     }
 

@@ -143,6 +143,18 @@ final class SelfTest {
                                     CompanionMod.LOGGER.info("selftest: flame part_2 scale={} translation={} viewRange={}", scale, translation, display.getViewRange());
                                 }
                             }
+                            if (e instanceof net.minecraft.world.entity.LivingEntity living && what.contains("warden")) {
+                                StringBuilder data = new StringBuilder();
+                                var items = living.getEntityData().getNonDefaultValues();
+                                if (items != null) {
+                                    for (var item : items) {
+                                        data.append(item.id()).append('=').append(item.value()).append(' ');
+                                    }
+                                }
+                                CompanionMod.LOGGER.info("selftest: {} invisible={} health={} dead={} scale={} bb={} renderer={} data[{}]", what, living.isInvisible(),
+                                    living.getHealth(), living.isDeadOrDying(), living.getScale(), living.getBoundingBox(),
+                                    client.getEntityRenderDispatcher().getRenderer(living).getClass().getName(), data);
+                            }
                             what += " @" + e.blockPosition().toShortString();
                             seen.merge(what.replaceAll(" @.*", "") + " near " + (e.blockPosition().getX() / 3 * 3) + "," + (e.blockPosition().getZ() / 3 * 3), 1, Integer::sum);
                         }

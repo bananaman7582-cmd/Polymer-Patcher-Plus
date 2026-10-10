@@ -46,13 +46,40 @@ public record PolyBaseItem(Item item) implements PolymerItem {
         // count travels in the stack itself, where it was always going to come from
         int count = itemStack.getCount();
         if (count <= MAX_WRITTEN_COUNT) {
-            return keepDamageOutOfIdentity(
-                transformSafely(itemStack, tooltipType, context, lookup), itemStack);
+            return keepOnlyClientComponents(keepDamageOutOfIdentity(
+                transformSafely(itemStack, tooltipType, context, lookup), itemStack));
         }
 
         ItemStack written = transformSafely(itemStack.copyWithCount(MAX_WRITTEN_COUNT), tooltipType, context, lookup);
         written.setCount(count);
-        return keepDamageOutOfIdentity(written, itemStack);
+        return keepOnlyClientComponents(keepDamageOutOfIdentity(written, itemStack));
+    }
+
+    /**
+     * Removes server-only component types from a vanilla carrier before it reaches a packet codec.
+     *
+     * <p>Polymer starts a stand-in from the real stack's component patch.  A patch entry whose value was
+     * removed is still an entry: its component type is written to the packet before the empty value is
+     * written.  Consequently, merely removing a custom component from the carrier is not sufficient.  A
+     * client without that mod receives the numeric id of a component type absent from its registry and the
+     * whole packet fails to decode.  Creative-tab contents made this especially visible because one unsafe
+     * entry prevents the player joining at all.</p>
+     *
+     * <p>A stand-in is deliberately a vanilla item with vanilla behavior and a resource-pack model.  Its
+     * recoverable server identity lives in {@link DataComponents#CUSTOM_DATA}, itself a vanilla component.
+     * It therefore has no legitimate reason to put a mod-registered component type on the wire.  Native
+     * items never enter this method, so clients with the matching mod retain every real component.</p>
+     */
+    static ItemStack keepOnlyClientComponents(ItemStack stack) {
+        var patch = stack.getComponentsPatch();
+        var safe = patch.forget(type -> {
+            Identifier id = net.minecraft.core.registries.BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(type);
+            return id == null || !"minecraft".equals(id.getNamespace());
+        });
+        if (safe == patch || safe.equals(patch)) {
+            return stack;
+        }
+        return new ItemStack(stack.typeHolder(), stack.getCount(), safe);
     }
 
     /**

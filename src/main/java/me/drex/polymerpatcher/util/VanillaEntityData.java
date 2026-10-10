@@ -201,6 +201,13 @@ public final class VanillaEntityData {
             map = shiftForEntityLevel(player);
         } else {
             Class<?> vanillaLayout = vanillaLayoutClass(entity);
+            if (vanillaLayout != null && vanillaLayout != entity.getClass() && sentAsItself(entity)) {
+                // A modded mob sent as itself goes only to a player who has its mod, so its own fields
+                // are ones the client keeps too. Laid out as the nearest vanilla class, they were all
+                // dropped: the Twisted Warden never told such a player what it was doing, and its own
+                // renderer kept it hidden in the ground it climbs out of until the moment it died
+                vanillaLayout = entity.getClass();
+            }
             Set<String> clientHas = NativeClients.shiftingModsOf(player);
             map = vanillaLayout != null && sentAsItself(entity)
                 ? indexMap(vanillaLayout, clientHas)
@@ -884,6 +891,15 @@ public final class VanillaEntityData {
 
             if (vanillaCount == Integer.MAX_VALUE) {
                 vanillaCount = serverCount;
+            }
+            if (!isVanillaClass(type)) {
+                // A mod's own class, only ever laid out for a client that has it. Its fields are the
+                // client's own as well, except any a further mod adds to it
+                int added = 0;
+                for (List<Integer> ids2 : TrackedDataMods.idsAddedTo(type).values()) {
+                    added += ids2.size();
+                }
+                vanillaCount = Math.max(0, serverCount - added);
             }
 
             // Whether this client has every mod that adds to this class. If it does, the fields those

@@ -36,6 +36,7 @@ public final class BlockPresentationRules {
     private static final List<CarrierRule> CARRIER_RULES = new CopyOnWriteArrayList<>();
     private static final List<HolderRule> HOLDER_RULES = new CopyOnWriteArrayList<>();
     private static final List<TickRule> TICK_RULES = new CopyOnWriteArrayList<>();
+    private static final List<TickRule> MODELLED_RULES = new CopyOnWriteArrayList<>();
 
     private BlockPresentationRules() {
     }
@@ -50,6 +51,23 @@ public final class BlockPresentationRules {
 
     public static void registerTicking(TickRule rule) {
         TICK_RULES.add(rule);
+    }
+
+    /**
+     * Blocks which say they are invisible because their renderer draws them, but which the pack has been
+     * given a real model for. Without this they are sent as air, whatever model the pack holds.
+     */
+    public static void registerModelled(TickRule rule) {
+        MODELLED_RULES.add(rule);
+    }
+
+    public static boolean modelled(BlockState state) {
+        for (TickRule rule : MODELLED_RULES) {
+            if (rule.applies(state)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static @Nullable BlockState carrier(BlockState state) {
