@@ -49,6 +49,19 @@ public abstract class ClientNumberCodecMixin {
     @Inject(method = "encode(Lnet/minecraft/network/RegistryFriendlyByteBuf;Ljava/lang/Object;)V", at = @At("HEAD"),
         cancellable = true, require = 0)
     private void polymerPatcher$writeClientNumber(RegistryFriendlyByteBuf buf, Object value, CallbackInfo ci) {
+        if (Registries.POTION.equals(this.val$registryKey)) {
+            var context = net.fabricmc.fabric.api.networking.v1.context.PacketContext.get();
+            if (!(buf instanceof eu.pb4.polymer.networking.api.ContextByteBuf)
+                && (context == null || context.get(net.fabricmc.fabric.api.networking.v1.context.PacketContext.CONNECTION) == null)) {
+                return; // Internal server buffer copies must retain the server's own numbering.
+            }
+            int vanillaId = me.drex.polymerpatcher.util.VanillaPotionIds.id(value);
+            if (vanillaId >= 0) {
+                VarInt.write(buf, vanillaId);
+                ci.cancel();
+            }
+            return;
+        }
         if (!Registries.DATA_COMPONENT_TYPE.equals(this.val$registryKey)) {
             return;
         }

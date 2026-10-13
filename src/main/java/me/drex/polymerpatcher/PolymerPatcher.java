@@ -43,6 +43,15 @@ public class PolymerPatcher implements DedicatedServerModInitializer {
 
     @Override
     public void onInitializeServer() {
+        if (Boolean.getBoolean("polymer-patcher.verifyPotionWire")) {
+            try {
+                me.drex.polymerpatcher.util.PotionWireIntegrationCheck.run();
+                System.exit(0);
+            } catch (Throwable error) {
+                LOGGER.error("POTION WIRE INTEGRATION FAILED", error);
+                System.exit(1);
+            }
+        }
         ConfigManager.load();
         // Before anything can ask Polymer for a carrier, because it takes its copy of the pools the
         // first time it is touched and works from that copy afterwards

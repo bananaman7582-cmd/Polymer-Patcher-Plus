@@ -68,6 +68,7 @@
 		"sync.ServerPlayerMenuMixin",
 		"sync.ConnectionNativeItemsMixin",
 		"sync.ClientNumberCodecMixin",
+		"sync.PotionContentsPacketMixin",
 		"sync.PacketDecoderMixin",
 		"sync.ConnectionEarlyFaultMixin",
 		"sync.ServerConfigurationKnownPacksMixin",

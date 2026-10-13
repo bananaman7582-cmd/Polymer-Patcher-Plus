@@ -114,6 +114,8 @@ tasks.register("generateVanillaBlockStateMap", JavaExec) {
     def outputFile = vanillaStateMapOutputDir.map { it.file("assets/polymer-patcher/vanilla_block_states_26_2.tsv") }
     args outputFile.get().asFile.absolutePath
     outputs.file(outputFile)
+    outputs.file(vanillaStateMapOutputDir.map { it.file("assets/polymer-patcher/vanilla_potion_ids_26_2.tsv") })
+    outputs.file(vanillaStateMapOutputDir.map { it.file("assets/polymer-patcher/vanilla_component_ids_26_2.tsv") })
 }
 
 tasks.register("generateCarrierTwins", JavaExec) {
@@ -338,6 +340,9 @@ tasks.named("check") {
 }
 
 loom {
+    if (project.hasProperty("verifyPotionWire")) {
+        runs.server.vmArg "-Dpolymer-patcher.verifyPotionWire=true"
+    }
     accessWidenerPath = file("src/main/resources/polymer-patcher.classtweaker")
 
     // Nothing to translate through on an unobfuscated Minecraft

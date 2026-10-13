@@ -38,6 +38,16 @@ public final class VanillaBlockStateMapGenerator {
         Path output = Path.of(args[0]);
         Files.createDirectories(output.getParent());
         Files.write(output, lines, StandardCharsets.UTF_8);
+        List<String> potionIds = new ArrayList<>();
+        for (var potion : BuiltInRegistries.POTION) {
+            potionIds.add(BuiltInRegistries.POTION.getId(potion) + "\t" + BuiltInRegistries.POTION.getKey(potion));
+        }
+        Files.write(output.resolveSibling("vanilla_potion_ids_26_2.tsv"), potionIds, StandardCharsets.UTF_8);
+        List<String> componentIds = new ArrayList<>();
+        for (var type : BuiltInRegistries.DATA_COMPONENT_TYPE) {
+            componentIds.add(BuiltInRegistries.DATA_COMPONENT_TYPE.getId(type) + "\t" + BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(type));
+        }
+        Files.write(output.resolveSibling("vanilla_component_ids_26_2.tsv"), componentIds, StandardCharsets.UTF_8);
         System.out.println("Generated " + lines.size() + " pristine Minecraft 26.2 block-state ids");
     }
 
