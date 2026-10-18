@@ -58,6 +58,10 @@
 			"environment": "server"
 		},
 		{
+			"config": "polymer-patcher-witherstorm.mixins.json",
+			"environment": "server"
+		},
+		{
 			"config": "polymer-patcher-voxy.mixins.json",
 			"environment": "server"
 		}

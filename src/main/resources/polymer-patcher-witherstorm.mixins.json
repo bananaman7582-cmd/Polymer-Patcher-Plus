@@ -1,0 +1,11 @@
+{
+  "required": false,
+  "package": "me.drex.polymerpatcher.mixin.witherstorm",
+  "plugin": "me.drex.polymerpatcher.compat.witherstorm.WitherStormMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "minVersion": "0.8",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "mixins": []
+}

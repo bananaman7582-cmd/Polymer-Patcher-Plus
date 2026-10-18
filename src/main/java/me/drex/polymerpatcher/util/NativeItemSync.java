@@ -255,6 +255,12 @@ public final class NativeItemSync {
                 }
                 rememberInboundNumbering(state, BuiltInRegistries.DATA_COMPONENT_TYPE, componentNamespaces);
             }
+            // Menus travel as numbers too, and a mod's own menu is sent as itself to a client that has the mod.
+            // Numbered the way this server numbers them - every other mod's menus included - it named a menu the
+            // client did not have, and the player was disconnected the moment one was opened in front of them
+            if (connectionOf(handler) instanceof NativeItemConnection menuState) {
+                renumber(menuState, sync, BuiltInRegistries.MENU, allSameVersion);
+            }
             return sync.isEmpty() ? null : sync;
         } catch (Throwable e) {
             // Anything unexpected falls back to exactly what would have happened without this

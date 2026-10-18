@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "polymer_patcher_witherstorm_wire_test",
+  "version": "1.0.0",
+  "name": "Wither Storm wire integration test (throwaway server only)",
+  "environment": "server",
+  "entrypoints": {
+    "main": ["me.drex.polymerpatcher.compat.witherstorm.WitherStormWireIntegration"]
+  },
+  "depends": {
+    "polymer-patcher": "*",
+    "witherstormmod": "*"
+  }
+}

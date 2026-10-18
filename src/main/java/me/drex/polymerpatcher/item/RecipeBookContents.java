@@ -3,13 +3,12 @@ package me.drex.polymerpatcher.item;
 import me.drex.polymerpatcher.PolymerPatcher;
 import me.drex.polymerpatcher.config.ConfigManager;
 import me.drex.polymerpatcher.util.NativeClients;
-import net.minecraft.core.Holder;
-import net.minecraft.core.HolderSet;
+import eu.pb4.polymer.core.api.utils.PolymerSyncedObject;
+import net.fabricmc.fabric.api.networking.v1.context.PacketContext;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
@@ -29,24 +28,26 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.display.RecipeDisplayId;
 
 /**
- * Decides what a player's recipe book is told, for a player who has not got the mods the server has.
+ * Decides what a player's recipe book is told, including native and partially modded clients.
  * <p>
  * A client works out for itself which recipes it can make: it counts up what it is holding and matches
  * that against the ingredients. Both halves of that are stand-ins here - a hundred different modded
  * items arrive as the same few vanilla ones - so the matching collapses, and the book lights up with
  * recipes that cannot be made. Two things are done about it, because the collapse happens twice.
  * <p>
- * <b>A mod's own recipes are left out.</b> A player without the mod could not read the ingredients,
- * could not tell the results apart, and gains nothing from the entry.
+ * <b>Missing-mod recipes can optionally be hidden.</b> This is controlled separately from craftability
+ * so servers can still show modded recipes to players using the resource pack.
  * <p>
- * <b>A vanilla recipe is asked for less.</b> Vanilla recipes take tags rather than items - two planks,
+ * <b>Craftability is judged on the server.</b> Vanilla recipes take tags rather than items - two planks,
  * not two oak planks - and mods add their own wood to those tags. A client running Polymer but not the
  * mod is sent those entries as the same stand-ins it is shown everywhere else, so the tag that reaches
  * it has a handful of stand-ins sitting in it, and its own modded items are those very stand-ins.
  * Carrying any two modded items is then carrying two of something every one of those tags accepts:
  * two lumps of guano lit up every recipe asking for two of anything a mod has joined, and clicking one
- * laid out a grid the server would not fill. So each ingredient is cut down to the part the client can
- * actually recognise before it is sent.
+ * laid out a grid the server would not fill. Even vanilla-only recipes can collide with an unrelated
+ * inventory item's carrier. All known requirements are evaluated against the real server inventory.
+ * Native clients use the same real counts; having some or all mods never changes ingredient identity
+ * on the server, and must not bypass this check while other inventory items still use carriers.
  * <p>
  * The recipes themselves are untouched, and so is what the book <em>shows</em> - the ingredient still
  * cycles through every item it accepts, modded ones included. Put the real thing in a grid and it
@@ -55,6 +56,20 @@ import net.minecraft.world.item.crafting.display.RecipeDisplayId;
 public final class RecipeBookContents {
 
     private RecipeBookContents() {
+    }
+
+    /**
+     * A recipe-book display is a dispatched protocol value, not an item/block carrier. Changing its
+     * type number cannot convert its payload. A cooking-pot display labelled as vanilla shapeless
+     * left its extra fields in the stream, which were then read as category IDs (1533 on this pack).
+     * Only send displays whose actual codec remains selected for this recipient. This also preserves
+     * genuinely native/shared custom displays; merely having a mod's channel is not enough.
+     * The real recipe and its machine/container menu are never changed by this book-only check.
+     */
+    public static boolean displayIsReadable(RecipeDisplayEntry entry, PacketContext context) {
+        var type = entry.display().type();
+        var synced = PolymerSyncedObject.getSyncedObject(BuiltInRegistries.RECIPE_DISPLAY, type);
+        return synced == null || synced.getPolymerReplacement(type, context) == type;
     }
 
     /**
@@ -75,8 +90,8 @@ public final class RecipeBookContents {
     }
 
     /**
-     * Whether the server judges this entry for the client instead of letting it judge for itself: any
-     * recipe with an ingredient the client is shown a stand-in for.
+     * Whether the server judges this entry for the client. Inventory carriers can collide with
+     * ingredients even when every ingredient in the recipe is vanilla.
      * <p>
      * A client lights a recipe by counting its own inventory against the ingredients, and for a player
      * without the mods both sides of that sum are stand-ins - several modded items share one vanilla look,
@@ -87,22 +102,16 @@ public final class RecipeBookContents {
      * satisfied), and none offered when it cannot (which it counts as not). {@link #tick} keeps the
      * answer current as the inventory changes.
      */
-    private static boolean judgedByServer(ServerPlayer player, RecipeDisplayEntry entry) {
-        if (!ConfigManager.config().entities.onlyCountItemsClientsCanTellApart || entry.craftingRequirements().isEmpty()) {
-            return false;
-        }
-        for (Ingredient ingredient : entry.craftingRequirements().get()) {
-            for (Holder<Item> item : ingredient.items().toList()) {
-                if (!tellsApart(player, item)) {
-                    return true;
-                }
-            }
-        }
-        return false;
+    static boolean judgedByServer(boolean enabled, RecipeDisplayEntry entry) {
+        // Looking only at the recipe's ingredients misses the other half of the collision: an unrelated
+        // modded stack in the inventory can use the SAME carrier as an entirely vanilla ingredient.
+        // NativeClients.has also does not imply raw items were synchronized for this connection.
+        // Judge all known requirements using real server items, including purely vanilla recipes.
+        return enabled && entry.craftingRequirements().isPresent();
     }
 
     public static RecipeDisplayEntry asTheyCanJudgeIt(ServerPlayer player, ResourceKey<Recipe<?>> recipe, RecipeDisplayEntry entry) {
-        if (!judgedByServer(player, entry)) {
+        if (!judgedByServer(ConfigManager.config().entities.onlyCountItemsClientsCanTellApart, entry)) {
             return entry;
         }
         StackedItemContents contents = contentsOf(player);
@@ -112,7 +121,7 @@ public final class RecipeBookContents {
         return answer(entry, craftable);
     }
 
-    private static RecipeDisplayEntry answer(RecipeDisplayEntry entry, boolean craftable) {
+    static RecipeDisplayEntry answer(RecipeDisplayEntry entry, boolean craftable) {
         return withRequirements(entry, craftable ? Optional.of(List.of()) : Optional.empty());
     }
 
@@ -203,16 +212,6 @@ public final class RecipeBookContents {
             }
         }
         return hash;
-    }
-
-    private static boolean tellsApart(ServerPlayer player, Holder<Item> item) {
-        Identifier id = BuiltInRegistries.ITEM.getKey(item.value());
-        if (id == null) {
-            return true;
-        }
-
-        String namespace = id.getNamespace();
-        return !PolymerPatcher.PATCHED_MODS.contains(namespace) || NativeClients.has(player, namespace);
     }
 
     private static RecipeDisplayEntry withRequirements(RecipeDisplayEntry entry, Optional<List<Ingredient>> requirements) {

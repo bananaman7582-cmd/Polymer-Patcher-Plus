@@ -21,6 +21,7 @@ import me.drex.polymerpatcher.compat.illagerinvasion.IllagerInvasionCompatibilit
 import me.drex.polymerpatcher.compat.neverend.NeverendClientEffects;
 import me.drex.polymerpatcher.compat.neverend.NeverendCompatibility;
 import me.drex.polymerpatcher.compat.sculkhorde.SculkHordeClientEffects;
+import me.drex.polymerpatcher.compat.witherstorm.WitherStormCompatibility;
 import me.drex.polymerpatcher.compat.ydtwo.YdtwoCompatibility;
 import me.drex.polymerpatcher.dump.data.RenderRegistry;
 import net.minecraft.server.level.ServerPlayer;
@@ -47,6 +48,7 @@ public final class CompatibilityModules {
         EnderscapeCompatibility.init();
         NeverendCompatibility.init();
         YdtwoCompatibility.init();
+        WitherStormCompatibility.init();
     }
 
     /** Hooks which intentionally run after the common resource loader has been registered. */

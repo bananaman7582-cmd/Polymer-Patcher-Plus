@@ -122,10 +122,11 @@ final class SelfTest {
                                 CompanionMod.LOGGER.info("selftest: hotbar {} {} model={}", slot, stack.getHoverName().getString(), stack.get(net.minecraft.core.component.DataComponents.ITEM_MODEL));
                             }
                         }
-                    } else if (command.equals("entities")) {
+                    } else if (command.equals("entities") || command.startsWith("entities ")) {
+                        double range = command.length() > 9 ? Double.parseDouble(command.substring(9).trim()) : 20;
                         java.util.Map<String, Integer> seen = new java.util.TreeMap<>();
                         for (var e : client.level.entitiesForRendering()) {
-                            if (e.distanceTo(client.player) > 20) {
+                            if (e.distanceTo(client.player) > range) {
                                 continue;
                             }
                             String what = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString();

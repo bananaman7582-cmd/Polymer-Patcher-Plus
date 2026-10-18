@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "polymer_patcher_consume_wire_test",
+  "version": "1.0.0",
+  "name": "Consume effect wire check (throwaway server only)",
+  "environment": "server",
+  "entrypoints": { "main": ["me.drex.polymerpatcher.item.ConsumeWireIntegration"] },
+  "depends": { "polymer-patcher": "*", "farmersdelight": "*" }
+}

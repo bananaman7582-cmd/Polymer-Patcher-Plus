@@ -24,6 +24,45 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(value = ElementHolder.class, remap = false)
 public abstract class ElementHolderMixin {
 
+    private static final java.util.concurrent.atomic.AtomicBoolean polymer_patcher$reportedOffThread = new java.util.concurrent.atomic.AtomicBoolean();
+
+    /**
+     * Moves a display being shown to, or taken from, a player onto the server thread.
+     * <p>
+     * Polymer keeps the displays each player is watching in a plain list. Changed from two threads at
+     * once, a list like that can end up with an empty slot in it, and the next time Polymer walked it -
+     * when that player left and their chunks were dropped - it found nothing there and took the whole
+     * server down. So a change from anywhere else is handed to the server thread to make.
+     */
+    @Inject(
+        method = {"startWatching(Lnet/minecraft/server/network/ServerGamePacketListenerImpl;)Z",
+            "stopWatching(Lnet/minecraft/server/network/ServerGamePacketListenerImpl;)Z"},
+        at = @At("HEAD"),
+        cancellable = true,
+        require = 0
+    )
+    private void polymer_patcher$onServerThread(ServerGamePacketListenerImpl connection, CallbackInfoReturnable<Boolean> callback) {
+        var player = connection == null ? null : connection.getPlayer();
+        var server = player == null ? null : player.level().getServer();
+        if (server == null || server.isSameThread()) {
+            return;
+        }
+        if (polymer_patcher$reportedOffThread.compareAndSet(false, true)) {
+            me.drex.polymerpatcher.PolymerPatcher.LOGGER.warn("A display was shown to or taken from a player off the server thread; moved onto it",
+                new IllegalStateException("called from " + Thread.currentThread().getName()));
+        }
+        ElementHolder holder = (ElementHolder) (Object) this;
+        boolean starting = callback.getId().contains("start");
+        server.execute(() -> {
+            if (starting) {
+                holder.startWatching(connection);
+            } else {
+                holder.stopWatching(connection);
+            }
+        });
+        callback.setReturnValue(false);
+    }
+
     @Inject(
         method = "startWatching(Lnet/minecraft/server/network/ServerGamePacketListenerImpl;)Z",
         at = @At("RETURN"),

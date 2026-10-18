@@ -19,8 +19,8 @@ import java.util.function.Consumer;
  * <p>
  * See {@link RecipeBookContents} for why: a client decides what it can craft by counting its own
  * inventory against the ingredients, and for such a player both are stand-ins, so it decides it can
- * craft things it cannot. A mod's own recipes are dropped, and the rest are asked for only the part of
- * each ingredient the client can recognise.
+ * craft things it cannot. Missing-mod recipes can optionally be hidden; all other known requirements
+ * are judged against the real server inventory, including recipes with only vanilla ingredients.
  * <p>
  * Caught here, where the book is filled, rather than at the packet - the recipe's own name is still in
  * hand at this point, and by the time it is a packet it is only a number.
@@ -44,7 +44,11 @@ public class RecipeBookMixin {
             return;
         }
 
-        Consumer<RecipeDisplayEntry> judged = entry -> into.accept(RecipeBookContents.asTheyCanJudgeIt(player, recipe, entry));
+        Consumer<RecipeDisplayEntry> judged = entry -> {
+            if (RecipeBookContents.displayIsReadable(entry, player.connection.getPacketContext())) {
+                into.accept(RecipeBookContents.asTheyCanJudgeIt(player, recipe, entry));
+            }
+        };
         original.call(resolver, recipe, judged);
     }
 }

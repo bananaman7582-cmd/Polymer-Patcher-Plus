@@ -62,7 +62,7 @@ public abstract class ClientNumberCodecMixin {
             }
             return;
         }
-        if (!Registries.DATA_COMPONENT_TYPE.equals(this.val$registryKey)) {
+        if (!Registries.DATA_COMPONENT_TYPE.equals(this.val$registryKey) && !Registries.MENU.equals(this.val$registryKey)) {
             return;
         }
         int clientId = ClientNumbering.toClientId(buf, this.val$registryKey, value);

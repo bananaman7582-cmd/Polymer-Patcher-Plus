@@ -222,6 +222,49 @@ tasks.register("verifyClientSafeComponents", JavaExec) {
 	mainClass = "me.drex.polymerpatcher.item.ClientSafeComponentsCheck"
 }
 
+tasks.register("verifyRecipeBookCraftability", JavaExec) {
+    dependsOn tasks.named("testClasses")
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "me.drex.polymerpatcher.item.RecipeBookCraftabilityCheck"
+}
+
+tasks.register("verifyConsumeEffectWire", JavaExec) {
+    dependsOn tasks.named("testClasses")
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "me.drex.polymerpatcher.item.ConsumeEffectWireCheck"
+}
+
+// Optional real-mod codec test: not bundled in the patcher and never run on a live world.
+tasks.register("witherStormIntegrationJar", Jar) {
+    dependsOn tasks.named("testClasses")
+    archiveFileName = "polymer-patcher-witherstorm-wire-test.jar"
+    destinationDirectory = layout.buildDirectory.dir("integration")
+    from(sourceSets.test.output) {
+        include "me/drex/polymerpatcher/compat/witherstorm/WitherStormWireIntegration*.class"
+    }
+    from("src/test/integration/witherstorm")
+}
+
+tasks.register("consumeIntegrationJar", Jar) {
+    dependsOn tasks.named("testClasses")
+    archiveFileName = "polymer-patcher-consume-wire-test.jar"
+    destinationDirectory = layout.buildDirectory.dir("integration")
+    from(sourceSets.test.output) {
+        include "me/drex/polymerpatcher/item/ConsumeWireIntegration*.class"
+    }
+    from("src/test/integration/consume")
+}
+
+tasks.register("recipeIntegrationJar", Jar) {
+    dependsOn tasks.named("testClasses")
+    archiveFileName = "polymer-patcher-recipe-wire-test.jar"
+    destinationDirectory = layout.buildDirectory.dir("integration")
+    from(sourceSets.test.output) {
+        include "me/drex/polymerpatcher/item/RecipeWireIntegration*.class"
+    }
+    from("src/test/integration/recipe")
+}
+
 tasks.register("verifyArmorEnchantability", JavaExec) {
 	dependsOn tasks.named("testClasses")
 	classpath = sourceSets.test.runtimeClasspath
@@ -318,6 +361,8 @@ tasks.named("test") {
 }
 
 tasks.named("check") {
+    dependsOn tasks.named("verifyConsumeEffectWire")
+    dependsOn tasks.named("verifyRecipeBookCraftability")
 	dependsOn tasks.named("verifyAlexsCavesHeldItemTransforms")
 	dependsOn tasks.named("verifyHeldItemPresentations")
 	dependsOn tasks.named("verifyClientSafeComponents")

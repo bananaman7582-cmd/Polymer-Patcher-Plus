@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "polymer_patcher_recipe_wire_test",
+  "version": "1.0.0",
+  "name": "Recipe wire check (throwaway server only)",
+  "environment": "server",
+  "entrypoints": { "main": ["me.drex.polymerpatcher.item.RecipeWireIntegration"] },
+  "depends": { "polymer-patcher": "*" }
+}

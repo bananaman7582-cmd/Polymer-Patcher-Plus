@@ -69,6 +69,12 @@ public final class VanillaEntityData {
     private static final int SERIALIZER_LIMIT = findSerializerLimit();
 
     /**
+     * Mods whose own kinds of value are passed through to players who have the mod. Kept to the ones that
+     * need it, since it rests on Fabric having numbered those kinds the same way for that player.
+     */
+    private static final Set<String> OWN_KINDS_KEPT = Set.of("witherstormmod");
+
+    /**
      * 255 ends the entry list. An entry carrying it would end the packet early and leave the rest of
      * the entries to be read as something else entirely.
      */
@@ -600,8 +606,14 @@ public final class VanillaEntityData {
         }
 
         int serializerId = EntityDataSerializers.getSerializedId(value.serializer());
-        if ((!VANILLA_SERIALIZER_TYPES.isEmpty() && !VANILLA_SERIALIZER_TYPES.contains(value.serializer()))
-            || serializerId < 0 || serializerId >= SERIALIZER_LIMIT) {
+        // A mod's own mob shown as itself goes only to a player who has that mod, and so has the kinds of
+        // value it registered too - Fabric numbers those by name for each player. Dropped here, the Wither
+        // Storm reached the very players with the mod without its block clusters, spells or targets
+        boolean ownKind = serializerId >= 0 && entity != null && !isVanillaClass(entity.getClass())
+            && OWN_KINDS_KEPT.contains(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).getNamespace())
+            && sentAsItself(entity);
+        if (!ownKind && ((!VANILLA_SERIALIZER_TYPES.isEmpty() && !VANILLA_SERIALIZER_TYPES.contains(value.serializer()))
+            || serializerId < 0 || serializerId >= SERIALIZER_LIMIT)) {
             report(value, entity, "its serializer (" + value.serializer().getClass().getName() + ", index " + serializerId + ") is not one a vanilla client has");
             return null;
         }

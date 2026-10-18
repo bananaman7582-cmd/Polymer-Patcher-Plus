@@ -30,7 +30,7 @@ public class EntityConfig {
     public boolean showArmourAbilityMeter = true;
 
     /**
-     * Leave a modded item out of the sum a client does to decide which recipes it can make.
+     * Let the server evaluate recipe-book craftability against real inventory and crafting-grid items.
      * <p>
      * A vanilla recipe asks for a tag rather than a list - two planks, not two oak planks - and mods
      * put their own wood in that tag. A client running Polymer but not the mod is sent those entries,
@@ -40,10 +40,10 @@ public class EntityConfig {
      * for two of anything a mod has joined, and clicking one laid out a grid the server would not
      * fill. The sum was being done on items the client cannot tell apart.
      * <p>
-     * With this on, what a client is asked to count is only the part of each ingredient it can
-     * recognise. The recipe still shows every item it accepts, modded ones included, and putting them
-     * in a grid still crafts - this is only about which entries are lit. The cost is the other way
-     * round: an entry that could have been made out of modded wood alone is no longer lit either.
+     * With this on, every recipe with known requirements receives the server's answer, including
+     * vanilla-only recipes: an unrelated custom item can share a vanilla ingredient's carrier too.
+     * Recipes still show their original ingredients and results; their craftable flags are refreshed
+     * when inventory or grid contents change. The field name is retained for existing configurations.
      */
     public boolean onlyCountItemsClientsCanTellApart = true;
 

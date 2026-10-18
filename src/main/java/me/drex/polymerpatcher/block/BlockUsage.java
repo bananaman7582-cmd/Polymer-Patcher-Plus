@@ -79,7 +79,11 @@ public final class BlockUsage {
         if (count == null || count < WORTH_PRIORITY) {
             return null;
         }
-        return 299 - (int) Math.min(299, count / 8);
+        // On a log scale, so the order keeps going all the way up. Counted linearly, everything past a couple
+        // of thousand tied at the front, and with over a hundred blocks there the tie was settled by registry
+        // order: Liminal Pools' tile stairs, a million and a half of them, lost every stair carrier to blocks
+        // with a hundredth as many and became one display each.
+        return 299 - (int) Math.min(299, Math.round(40 * Math.log10(count)));
     }
 
     /** A display for this block has just been put in the world. */
