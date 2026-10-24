@@ -69,6 +69,7 @@
 		"sync.AbstractContainerMenuAccessor",
 		"sync.ClientboundPlayerInfoUpdatePacketAccessor",
 		"sync.RecipeBookMixin",
+		"sync.AttachmentDataCommandMixin",
 		"sync.ElementHolderMixin",
 		"sync.DropChunkHolderGuardMixin",
 		"sync.EmptyParticlePacketGuardMixin",
