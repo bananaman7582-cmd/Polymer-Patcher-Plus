@@ -10,6 +10,10 @@ public final class CarrierStateSafety {
     private CarrierStateSafety() {
     }
 
+    public static boolean isLightSafeCarrier(BlockState original, @Nullable BlockState carrier) {
+        return carrier == null || carrier.getLightEmission() <= original.getLightEmission();
+    }
+
     /** True unless the client carrier would introduce water that the real block does not contain. */
     public static boolean isWaterSafeCarrier(BlockState original, @Nullable BlockState carrier) {
         if (carrier == null) {

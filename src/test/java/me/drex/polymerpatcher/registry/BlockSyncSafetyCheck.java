@@ -20,6 +20,10 @@ public final class BlockSyncSafetyCheck {
     public static void main(String[] args) {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
+        expect(!CarrierStateSafety.isLightSafeCarrier(Blocks.STONE.defaultBlockState(),
+            Blocks.GLOWSTONE.defaultBlockState()), "dark blocks must not receive luminous carriers");
+        expect(CarrierStateSafety.isLightSafeCarrier(Blocks.GLOWSTONE.defaultBlockState(),
+            Blocks.STONE.defaultBlockState()), "light is supplied by the source world, not required from a carrier");
 
         Identifier stone = Identifier.fromNamespaceAndPath("minecraft", "stone");
         Identifier backported = Identifier.fromNamespaceAndPath("minecraft", "polymer_patcher_fake_future_block");

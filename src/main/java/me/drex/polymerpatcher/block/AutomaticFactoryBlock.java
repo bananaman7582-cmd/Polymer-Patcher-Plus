@@ -89,6 +89,7 @@ public record AutomaticFactoryBlock(
      * freezes or pricks is caught the same way.
      */
     private static final Map<BlockModelType, Boolean> MODEL_TYPE_HARMFUL = new EnumMap<>(BlockModelType.class);
+    private static final Map<BlockModelType, Integer> MODEL_TYPE_EMISSION = new EnumMap<>(BlockModelType.class);
 
     /** Vanilla blocks that do something to a player standing in or on them. */
     private static final Set<Block> HURTS = Set.of(
@@ -260,6 +261,7 @@ public record AutomaticFactoryBlock(
                 MODEL_TYPE_OUTLINE.put(blockModel, ShapeKey.of(mappedStateCandidate.getShape(world, BlockPos.ZERO)));
                 MODEL_TYPE_OFFSET.put(blockModel, mappedStateCandidate.hasOffsetFunction());
                 MODEL_TYPE_HARMFUL.put(blockModel, HURTS.contains(mappedStateCandidate.getBlock()));
+                MODEL_TYPE_EMISSION.put(blockModel, mappedStateCandidate.getLightEmission());
             } catch (Exception ignored) {
                 // A carrier that will not say costs only its own place in the ordering below
             }
@@ -308,6 +310,7 @@ public record AutomaticFactoryBlock(
             PolymerPatcher.LOGGER.debug("Could not read the variants of {}", id, e);
         }
 
+        SlabMaterials.discover(originalBlock, parsedVariants);
         Map<BlockState, BlockState> mappedStates = new HashMap<>();
         Set<BlockState> requiresElementHolder = new HashSet<>();
         originalBlock.getStateDefinition().getPossibleStates().forEach(state -> {
@@ -315,7 +318,8 @@ public record AutomaticFactoryBlock(
                 // A dry source sent as a wet vanilla carrier creates real client-side water. Keep this
                 // invariant at the boundary as well as in every allocator path, so a new fallback can
                 // never quietly turn stairs, slabs or leaves into water sources again.
-                if (!CarrierStateSafety.isWaterSafeCarrier(state, mappedState)) {
+                if (!CarrierStateSafety.isWaterSafeCarrier(state, mappedState)
+                    || !CarrierStateSafety.isLightSafeCarrier(state, mappedState)) {
                     PolymerPatcher.LOGGER.debug("Rejected waterlogged carrier {} for dry blockstate {}", mappedState, state);
                     requiresElementHolder.add(state);
                     mappedState = null;
@@ -524,6 +528,8 @@ public record AutomaticFactoryBlock(
     ) {
         // A block can hold water without a waterlogged property - kelp-like blocks keep water in their
         // fluid state instead. Its stand-in has to hold the water too, or each one is an air pocket
+        BlockState direct = SlabMaterials.doubleCarrier(originalState);
+        if (direct != null) return direct;
         Boolean waterLogged = originalState.getValueOrElse(BlockStateProperties.WATERLOGGED, false)
             || (originalState.getFluidState().getType() == net.minecraft.world.level.material.Fluids.WATER);
 
@@ -682,7 +688,7 @@ public record AutomaticFactoryBlock(
                     .map(x -> new PolymerBlockModel(x.model(), x.x(), x.y(), x.uvlock(), x.weigth()))
                     .toArray(PolymerBlockModel[]::new);
                 return ExtraCarriers.request(collisionKey, waterLogged, polymerDistance, orEqual,
-                    List.of(parsedVariant.getSecond(), waterLogged), models);
+                    List.of(parsedVariant.getSecond(), waterLogged), models, originalState.getLightEmission());
             }
         }
         return null;
@@ -926,6 +932,9 @@ public record AutomaticFactoryBlock(
 
         List<Scored> scored = new ArrayList<>();
         for (BlockModelType candidate : mappedBlockModelCandidates) {
+            // Active sculk sensors have slab-like collision but emit light. A model replacement
+            // does not remove that property, so a dark concrete slab looked luminous.
+            if (MODEL_TYPE_EMISSION.getOrDefault(candidate, 0) > original.getLightEmission()) continue;
             if (MODEL_TYPE_HARMFUL.getOrDefault(candidate, false)) {
                 continue;
             }
@@ -1005,6 +1014,7 @@ public record AutomaticFactoryBlock(
             || (original.getFluidState().getType() == net.minecraft.world.level.material.Fluids.WATER);
 
         List<BlockModelType> ordered = new ArrayList<>(candidates);
+        ordered.removeIf(candidate -> MODEL_TYPE_EMISSION.getOrDefault(candidate, 0) > original.getLightEmission());
         if (!waterLogged) {
             ordered.removeIf(WATERLOGGED::contains);
         }
@@ -1213,7 +1223,8 @@ public record AutomaticFactoryBlock(
      */
     @Override
     public boolean handleMiningOnServer(ItemStack tool, BlockState state, BlockPos pos, ServerPlayer player) {
-        return !CompanionServer.hasBlock(player, state.getBlock());
+        // The companion also inherits missing tool tags, so let corrected server rules time these.
+        return SlabMaterials.miningState(state) != state || !CompanionServer.hasBlock(player, state.getBlock());
     }
 
     /** A companion client moves against the real shape, so the server must too or the two fight. */

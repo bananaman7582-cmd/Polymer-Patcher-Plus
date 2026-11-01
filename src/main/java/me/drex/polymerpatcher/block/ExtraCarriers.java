@@ -107,7 +107,7 @@ public final class ExtraCarriers {
      * nearest - or, with {@code orEqual}, at least as well, for when Polymer's have run out.
      */
     static @Nullable BlockState request(ShapeKey collision, boolean waterlogged, double polymerDistance, boolean orEqual,
-                                        Object look, PolymerBlockModel[] models) {
+                                        Object look, PolymerBlockModel[] models, int maxEmission) {
         Kind best = null;
         double bestDistance = polymerDistance;
         for (Kind kind : KINDS) {
@@ -116,7 +116,10 @@ public final class ExtraCarriers {
             }
             double distance = collision.distanceTo(kind.collision);
             boolean better = distance + EPSILON < bestDistance || orEqual && best == null && distance <= bestDistance + EPSILON;
-            if (better && (kind.byModel.containsKey(look) || !kind.free.isEmpty())) {
+            BlockState cached = kind.byModel.get(look);
+            boolean available = cached != null && cached.getLightEmission() <= maxEmission
+                || kind.free.stream().anyMatch(twin -> twin.carrier().getLightEmission() <= maxEmission);
+            if (better && available) {
                 best = kind;
                 bestDistance = distance;
             }
@@ -125,10 +128,18 @@ public final class ExtraCarriers {
             return null;
         }
         BlockState cached = best.byModel.get(look);
-        if (cached != null) {
+        if (cached != null && cached.getLightEmission() <= maxEmission) {
             return cached;
         }
-        Twin twin = best.free.poll();
+        Twin twin = null;
+        for (var iterator = best.free.iterator(); iterator.hasNext();) {
+            Twin candidate = iterator.next();
+            if (candidate.carrier().getLightEmission() <= maxEmission) {
+                twin = candidate;
+                iterator.remove();
+                break;
+            }
+        }
         if (twin == null) {
             return null;
         }

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "polymer_patcher_slab_test",
+  "version": "1.0.0",
+  "environment": "server",
+  "entrypoints": { "main": ["me.drex.polymerpatcher.block.SlabIntegration"] },
+  "depends": { "polymer-patcher": "*", "falldrop_backport": "*" }
+}

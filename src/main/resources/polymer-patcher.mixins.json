@@ -13,6 +13,7 @@
 		"requireAnnotations": true
 	},
 	"mixins": [
+		"block.SlabToolMaterialMixin",
 		"sync.DataValueSerializerIdMixin",
 		"item.HolderSetNamedAccessor",
 		"item.HolderReferenceAccessor",

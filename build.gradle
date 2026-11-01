@@ -255,6 +255,14 @@ tasks.register("consumeIntegrationJar", Jar) {
     from("src/test/integration/consume")
 }
 
+tasks.register("slabIntegrationJar", Jar) {
+    dependsOn tasks.named("testClasses")
+    archiveFileName = "polymer-patcher-slab-test.jar"
+    destinationDirectory = layout.buildDirectory.dir("integration")
+    from(sourceSets.test.output) { include "me/drex/polymerpatcher/block/SlabIntegration*.class" }
+    from("src/test/integration/slab")
+}
+
 tasks.register("attachmentIntegrationJar", Jar) {
     dependsOn tasks.named("testClasses")
     archiveFileName = "polymer-patcher-attachment-command-test.jar"
